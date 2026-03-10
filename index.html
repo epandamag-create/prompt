@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">
+
+    <title>Prompt Organizer</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script>
+    (function() {
+        'use strict';
+        try {
+            var stored = localStorage.getItem('promptOrganizerData');
+            if (!stored) return;
+            var data = JSON.parse(stored);
+            if (!data || !data.preferences) return;
+            var prefs = data.preferences;
+            if (prefs.theme) document.documentElement.setAttribute('data-theme', prefs.theme);
+            if (prefs.density) document.documentElement.setAttribute('data-density', prefs.density);
+        } catch(e) {}
+    })();
+    </script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header" role="banner">
+            <div class="header-left">
+                <button class="header-btn" data-action="toggle-sidebar" title="Toggle Sidebar" aria-label="Toggle Sidebar" aria-expanded="true" id="sidebarToggleBtn">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h18v18H3V3zm6 0v18"/>
+                    </svg>
+                </button>
+                <div class="logo">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    <span>Prompt Organizer</span>
+                </div>
+            </div>
+
+            <div class="header-center">
+                <div class="search-box">
+                    <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                    <input type="text" id="searchInput" placeholder="Search prompts..." title="Search (Ctrl+K)" aria-label="Search prompts" role="searchbox">
+                    <span class="search-clear-btn" id="searchClearBtn" data-action="clear-search" title="Clear">✕</span>
+                </div>
+            </div>
+
+            <div class="header-right">
+                <button class="btn btn-primary" data-action="show-add-prompt-modal" title="New Prompt (Ctrl+N)">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    New Prompt
+                </button>
+            </div>
+        </header>
+
+        <!-- Shortcuts overlay (triggered from sidebar) -->
+        <div class="shortcuts-overlay" id="shortcutsDropdown" data-action="close-dropdown" data-id="shortcutsDropdown">
+            <div class="shortcuts-panel">
+                <div class="shortcuts-title">Keyboard Shortcuts</div>
+                <div id="shortcutsList">
+                    <!-- Populated dynamically from HOTKEY_REGISTRY -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Search Bar (visible only on small screens) -->
+        <div class="mobile-search-bar">
+            <div class="search-box">
+                <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                <input type="text" id="mobileSearchInput" placeholder="Search prompts...">
+                <span class="search-clear-btn" id="mobileSearchClearBtn" data-action="clear-mobile-search" title="Clear">✕</span>
+            </div>
+        </div>
+
+        <div class="app-body">
+            <!-- Mobile sidebar backdrop -->
+            <div class="sidebar-backdrop" id="sidebarBackdrop" data-action="close-mobile-sidebar"></div>
+            
+            <!-- Sidebar -->
+            <aside class="app-sidebar" id="sidebar" role="navigation" aria-label="Prompt navigation">
+                <div class="sidebar-content">
+                    <!-- Quick Access (not collapsible) -->
+                    <div class="sidebar-section sidebar-section-mb">
+                        <div class="sidebar-section-header" data-action="toggle-sidebar-section" data-section="quickaccess">
+                            <span class="sidebar-section-title">Quick Access</span>
+                            <svg class="sidebar-section-toggle" id="toggle-quickaccess" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </div>
+                        <div class="sidebar-section-body" id="body-quickaccess">
+                            <div class="sidebar-section-body-inner">
+                                <div class="quick-access-item active" data-action="set-view" data-view="all">
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                    </svg>
+                                    <span>All Prompts</span>
+                                    <span class="badge" id="allCount">0</span>
+                                </div>
+                                <div class="quick-access-item" data-action="set-view" data-view="favorites">
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+                                    </svg>
+                                    <span>Favorites</span>
+                                    <span class="badge" id="favCount">0</span>
+                                </div>
+                                <div class="quick-access-item" data-action="set-view" data-view="recent">
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    <span>Recent</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Categories -->
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-header" data-action="toggle-sidebar-section" data-section="categories">
+                            <span class="sidebar-section-title">Categories</span>
+                            <svg class="sidebar-section-toggle" id="toggle-categories" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </div>
+                        <div class="sidebar-section-body" id="body-categories">
+                            <div class="sidebar-section-body-inner">
+                                <div id="categoriesList"></div>
+                                <button class="add-category-btn" data-action="show-add-category-modal">
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    <span>New Category</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Collections -->
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-header" data-action="toggle-sidebar-section" data-section="collections">
+                            <span class="sidebar-section-title">Collections</span>
+                            <svg class="sidebar-section-toggle" id="toggle-collections" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </div>
+                        <div class="sidebar-section-body" id="body-collections">
+                            <div class="sidebar-section-body-inner">
+                                <div id="collectionsList"></div>
+                                <button class="add-collection-btn" data-action="show-add-collection-modal">
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    <span>New Collection</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tags -->
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-header" data-action="toggle-sidebar-section" data-section="tags">
+                            <span class="sidebar-section-title">Tags</span>
+                            <svg class="sidebar-section-toggle" id="toggle-tags" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </div>
+                        <div class="sidebar-section-body" id="body-tags">
+                            <div class="sidebar-section-body-inner">
+                                <div id="tagsList"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-footer">
+                    <div class="sidebar-footer-row">
+                        <button class="sidebar-action-btn" data-action="show-import-modal" title="Import">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                            </svg>
+                            <span>Import</span>
+                        </button>
+                        <button class="sidebar-action-btn" data-action="toggle-export-menu" title="Export">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                            </svg>
+                            <span>Export</span>
+                        </button>
+                    </div>
+                    <button class="sidebar-action-btn" data-action="toggle-shortcuts-menu" title="Keyboard Shortcuts">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="svg-icon-sm">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span>Shortcuts</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="app-main" role="main" aria-label="Prompt library">
+                <div class="content-header">
+                    <div class="content-title-row">
+                        <h1 class="content-title" id="contentTitle">All Prompts</h1>
+                        <span class="content-stats" id="statsDisplay">0 prompts</span>
+                    </div>
+                    <div class="toolbar-controls">
+                        <div class="toolbar-group">
+                            <button class="toolbar-btn" id="gridViewBtn" data-action="set-view-mode" data-mode="grid" title="Grid View">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+                            </button>
+                            <button class="toolbar-btn" id="listViewBtn" data-action="set-view-mode" data-mode="list" title="List View">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                            </button>
+                        </div>
+                        <div class="toolbar-separator"></div>
+                        <div class="dropdown">
+                            <button class="toolbar-btn" data-action="toggle-sort-menu" title="Sort">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"/></svg>
+                                <span class="toolbar-label">Sort</span>
+                            </button>
+                            <div class="dropdown-menu" id="sortDropdown">
+                                <div class="dropdown-option active" data-action="set-sort" data-sort="newest">Newest first</div>
+                                <div class="dropdown-option" data-action="set-sort" data-sort="oldest">Oldest first</div>
+                                <div class="dropdown-option" data-action="set-sort" data-sort="az">A ↑ Z</div>
+                                <div class="dropdown-option" data-action="set-sort" data-sort="za">Z ↓ A</div>
+                                <div class="dropdown-option" data-action="set-sort" data-sort="mostused">Most used</div>
+                                <div class="dropdown-option" data-action="set-sort" data-sort="recentlyused">Recently used</div>
+                            </div>
+                        </div>
+                        <div class="dropdown">
+                            <button class="toolbar-btn" data-action="toggle-density-menu" title="Density">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                            </button>
+                            <div class="dropdown-menu" id="densityDropdown">
+                                <div class="dropdown-option" data-action="set-density" data-density="compact">Compact</div>
+                                <div class="dropdown-option active" data-action="set-density" data-density="comfortable">Comfortable</div>
+                                <div class="dropdown-option" data-action="set-density" data-density="spacious">Spacious</div>
+                            </div>
+                        </div>
+                        <div class="toolbar-separator"></div>
+                        <button class="toolbar-btn" id="themeToggleBtn" data-action="toggle-theme" title="Toggle Theme">
+                            <svg id="themeIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="filter-bar" id="filterBar"></div>
+
+                <div class="content-body">
+                    <div class="prompt-grid" id="promptGrid">
+                        <!-- Prompts will be inserted here -->
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Add/Edit Prompt Modal -->
+    <div class="modal-overlay" id="promptModal" data-action="hide-prompt-modal" role="dialog" aria-modal="true" aria-labelledby="promptModalTitle">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title" id="promptModalTitle">New Prompt</h2>
+                <button class="modal-close" data-action="hide-prompt-modal">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="promptForm">
+                    <div class="form-group">
+                        <label class="form-label" for="promptTitle">Title *</label>
+                        <input type="text" class="form-input" id="promptTitle" placeholder="My Awesome Prompt" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="promptDescription">Description</label>
+                        <input type="text" class="form-input" id="promptDescription" placeholder="What does this prompt do?">
+                    </div>
+                    <div class="form-group form-group-row">
+                        <div>
+                            <label class="form-label" for="promptCategory">Category</label>
+                            <select class="form-input" id="promptCategory">
+                                <option value="">No Category</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label" for="promptCollection">Collection</label>
+                            <select class="form-input" id="promptCollection">
+                                <option value="">No Collection</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label form-label-content" for="promptContent">
+                            <span>Prompt Content *</span>
+                            <span id="charCounter" class="char-counter">0 chars</span>
+                        </label>
+                        <textarea class="form-input" id="promptContent" placeholder="Enter your prompt here. Use {variable} for placeholders." required></textarea>
+                        <div class="form-hint">
+                            🛈 Use <code>{variable_name}</code> syntax for variables. 
+                            Example: "Write a blog post about <code>{topic}</code> in <code>{language}</code>"
+                        </div>
+                        <div id="variablesPreview" class="variables-preview">
+                            <span class="variables-preview-label">Detected variables:</span>
+                            <div id="variablesList" class="variables-preview-list"></div>
+                        </div>
+                    </div>
+                    <div class="form-group form-group-tags">
+                        <label class="form-label" for="promptTags">Tags</label>
+                        <div class="form-input-wrap">
+                            <input type="text" class="form-input" id="promptTags" placeholder="chatgpt, coding, marketing" autocomplete="off">
+                            <div id="tagSuggestions" class="tag-suggestions"></div>
+                        </div>
+                    </div>
+                    <div class="form-hint form-hint-tags">Separate tags with commas</div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-action="hide-prompt-modal">Cancel</button>
+                <button class="btn btn-primary" data-action="submit-form" data-form-id="promptForm">
+                    <span id="savePromptText">Save</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Collection Modal -->
+    <div class="modal-overlay" id="collectionModal" data-action="hide-collection-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title" id="collectionModalTitle">New Collection</h2>
+                <button class="modal-close" data-action="hide-collection-modal">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="collectionForm">
+                    <div class="form-group">
+                        <label class="form-label" for="collectionName">Collection Name *</label>
+                        <input type="text" class="form-input" id="collectionName" placeholder="Work, Personal, ChatGPT, etc." required>
+                    </div>
+                    <div class="form-group">
+                        <span class="form-label">Color</span>
+                        <div class="color-swatches" id="collectionColorSwatches"></div>
+                        <input type="hidden" id="collectionColor" value="#3b82f6">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-action="hide-collection-modal">Cancel</button>
+                <button class="btn btn-primary" id="collectionModalSaveBtn" data-action="submit-form" data-form-id="collectionForm">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Category Modal -->
+    <div class="modal-overlay" id="categoryModal" data-action="hide-category-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title" id="categoryModalTitle">New Category</h2>
+                <button class="modal-close" data-action="hide-category-modal">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="categoryForm">
+                    <div class="form-group">
+                        <label class="form-label" for="categoryName">Category Name *</label>
+                        <input type="text" class="form-input" id="categoryName" placeholder="Development, Marketing, Writing..." required>
+                    </div>
+                    <div class="form-group">
+                        <span class="form-label">Color</span>
+                        <div class="color-swatches" id="categoryColorSwatches"></div>
+                        <input type="hidden" id="categoryColor" value="#8b5cf6">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-action="hide-category-modal">Cancel</button>
+                <button class="btn btn-primary" id="categoryModalSaveBtn" data-action="submit-form" data-form-id="categoryForm">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Use Prompt Modal -->
+    <div class="modal-overlay" id="usePromptModal" data-action="hide-use-prompt-modal">
+        <div class="modal modal-wide">
+            <div class="modal-header">
+                <h2 class="modal-title" id="usePromptTitle">Use Prompt</h2>
+                <button class="modal-close" data-action="hide-use-prompt-modal">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="variableProgress" class="variable-progress">
+                     <div class="variable-progress-header">
+                         <span class="variable-progress-label">Fill Variables</span>
+                         <span id="progressText" class="variable-progress-text">0/0</span>
+                     </div>
+                    <div class="variable-progress-bar-wrap">
+                         <div id="progressBar" class="variable-progress-bar"></div>
+                     </div>
+                </div>
+                <div id="variableInputs"></div>
+                <div class="form-group form-group-mt-20">
+                    <span class="form-label">
+                        Preview
+                        <span class="preview-label">
+                             Variables highlighted in <span class="preview-label-accent">blue</span>
+                         </span>
+                    </span>
+                    <div id="finalPromptPreview" class="preview-box"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary clear-values-btn" data-action="clear-variable-values" id="clearValuesBtn">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                    Clear Values
+                </button>
+                <button class="btn btn-secondary" data-action="hide-use-prompt-modal">Close</button>
+                <button class="btn btn-primary" id="copyPromptBtn" data-action="copy-final-prompt">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                    </svg>
+                    <span id="copyPromptBtnText">Copy Prompt</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div class="modal-overlay" id="importModal" data-action="hide-import-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title">Import Prompts</h2>
+                <button class="modal-close" data-action="hide-import-modal">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="importFile">Select JSON or CSV file</label>
+                    <input type="file" class="form-input" id="importFile" accept=".json,.csv">
+                    <div class="form-hint">Import prompts from a previously exported JSON or CSV file</div>
+                </div>
+                <div class="form-group">
+                    <span class="form-label">Import Mode</span>
+                    <div class="import-mode-options">
+                         <label class="radio-label">
+                             <input type="radio" name="importMode" value="merge" checked>
+                            <span><strong>Merge</strong> — add new prompts, keep existing ones</span>
+                        </label>
+                        <label class="radio-label">
+                             <input type="radio" name="importMode" value="replace">
+                             <span><strong>Replace</strong> — overwrite all data with imported file</span>
+                         </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-action="hide-import-modal">Cancel</button>
+                <button class="btn btn-primary" data-action="import-prompts">Import</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div class="modal-overlay" id="exportModal" data-action="hide-export-modal">
+        <div class="modal modal-narrow">
+            <div class="modal-header">
+                <h2 class="modal-title">Export Prompts</h2>
+                <button class="modal-close" data-action="hide-export-modal">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-body-text">Choose export format and scope:</p>
+                <div class="form-group">
+                    <span class="form-label">Export Format</span>
+                    <div class="export-format-options">
+                         <label class="export-option">
+                             <input type="radio" name="exportFormat" value="json" checked>
+                             <div class="export-option-content">
+                                 <div class="export-option-title">JSON</div>
+                                 <div class="export-option-desc">Full data backup with all fields</div>
+                             </div>
+                        </label>
+                        <label class="export-option">
+                             <input type="radio" name="exportFormat" value="csv">
+                             <div class="export-option-content">
+                                <div class="export-option-title">CSV</div>
+                                <div class="export-option-desc">Spreadsheet compatible format</div>
+                             </div>
+                         </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <span class="form-label">Export Scope</span>
+                    <div class="export-scope-options">
+                         <label class="radio-label">
+                             <input type="radio" name="exportScope" value="all" checked>
+                             <span><strong>All prompts</strong> — export everything</span>
+                         </label>
+                        <label class="radio-label">
+                             <input type="radio" name="exportScope" value="filtered">
+                             <span><strong>Current view</strong> — only visible prompts</span>
+                         </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-action="hide-export-modal">Cancel</button>
+                <button class="btn btn-primary" data-action="execute-export">Export</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Confirm Modal -->
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal modal-confirm">
+            <div class="modal-header">
+                <h2 class="modal-title" id="confirmModalTitle">Confirm</h2>
+                <button class="modal-close" data-action="hide-confirm-modal">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="confirmModalMessage" class="confirm-message"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-action="hide-confirm-modal">Cancel</button>
+                <button class="btn btn-danger" id="confirmModalOkBtn">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Move to Collection Modal -->
+    <div class="modal-overlay" id="bulkMoveModal" data-action="hide-bulk-move-modal">
+        <div class="modal modal-confirm">
+            <div class="modal-header">
+                <h2 class="modal-title">Move to Collection</h2>
+                <button class="modal-close" data-action="hide-bulk-move-modal">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="bulk-move-count-text">
+                    Select a collection for <strong id="bulkMoveCount">0</strong> selected prompts:
+                </p>
+                <div class="bulk-move-list">
+                     <label class="dropdown-option bulk-move-option">
+                         <input type="radio" name="bulkMoveCollection" value="" class="accent-radio" style="margin-right: 8px;">
+                         <strong>No Collection</strong> (remove from current)
+                     </label>
+                    <div id="bulkMoveCollectionsList" class="bulk-move-collections-list"></div>
+                 </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-action="hide-bulk-move-modal">Cancel</button>
+                <button class="btn btn-primary" data-action="execute-bulk-move">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Move
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Actions Bar -->
+    <div class="bulk-actions-bar" id="bulkActionsBar" role="toolbar" aria-label="Bulk actions">
+        <span class="bulk-count" id="bulkCount">0 selected</span>
+        <div class="bulk-divider"></div>
+        <button class="btn btn-secondary bulk-action-btn-sm" data-action="bulk-select-all">Select All</button>
+        <button class="btn btn-secondary bulk-action-btn-sm" data-action="bulk-move-to-collection">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+             Move
+        </button>
+        <button class="btn btn-secondary bulk-action-btn-sm" data-action="bulk-toggle-favorite">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+             Favorite
+        </button>
+        <button class="btn btn-danger bulk-action-btn-sm" data-action="bulk-delete">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+             Delete
+        </button>
+        <div class="bulk-divider"></div>
+        <button class="btn btn-secondary bulk-action-btn-sm" data-action="bulk-clear-selection">Cancel</button>
+     </div>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

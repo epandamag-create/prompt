@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt Organizer Tests</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            padding: 20px;
+            background: #111;
+            color: #eee;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h3 { margin-top: 30px; color: #888; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        .test-pass { color: #4ade80; margin: 5px 0; font-family: monospace; }
+        .test-fail { color: #f87171; margin: 5px 0; font-family: monospace; font-weight: bold; }
+        .test-pending { color: #fbbf24; margin: 5px 0; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>Test Results</h1>
+    <div id="test-results"></div>
+
+    <script type="module">
+        import './tests/utils/helpers.test.js';
+        import './tests/models/collection.test.js';
+        import './tests/models/prompt.test.js';
+        import './tests/controllers/search-controller.test.js';
+        import './tests/controllers/prompt-controller.test.js';
+        import './tests/controllers/bulk-controller.test.js';
+        import './tests/services/validation.test.js';
+        import './tests/controllers/filter-controller.test.js';
+        import './tests/controllers/toolbar-controller.test.js';
+        import './tests/controllers/sidebar-controller.test.js';
+        import './tests/controllers/io-controller.test.js';
+    </script>
+</body>
+</html>
