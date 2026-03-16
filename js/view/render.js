@@ -222,6 +222,7 @@ function generatePromptCardHTML(prompt, categoryMap, collectionMap) {
     div.className = `prompt-card ${isSelected ? 'selected' : ''}`;
     div.setAttribute('role', 'article');
     div.setAttribute('aria-label', prompt.title);
+    div.setAttribute('tabindex', '0');
     div.dataset.promptId = safeId;
     div.dataset.originalId = prompt.id;
     div.dataset.updatedAt = prompt.updatedAt;
@@ -336,7 +337,8 @@ export function renderCollections(promptCounts) {
         const color = collection.color || '#3b82f6';
         const safeId = sanitizeId(collection.id);
         return `
-            <div class="collection-item" data-action="set-collection-view" data-id="${safeId}" data-original-id="${escapeHtml(collection.id)}" role="treeitem" aria-label="${escapeHtml(collection.name)}, ${count} prompts">
+            <div class="collection-item" draggable="true" data-action="set-collection-view" data-id="${safeId}" data-original-id="${escapeHtml(collection.id)}" role="treeitem" aria-label="${escapeHtml(collection.name)}, ${count} prompts">
+                <span class="drag-handle" title="Drag to reorder">⠿</span>
                 <span class="collection-color-dot" style="background: ${color};"></span>
                 <span class="collection-item-name">${escapeHtml(collection.name)}</span>
                 <span class="collection-item-count">${count}</span>
@@ -365,7 +367,8 @@ export function renderCategories(categoryCounts) {
         const color = cat.color || '#8b5cf6';
         const safeId = sanitizeId(cat.id);
         return `
-            <div class="category-item" data-action="set-category-view" data-id="${safeId}" data-original-id="${escapeHtml(cat.id)}" role="treeitem" aria-label="${escapeHtml(cat.name)}, ${count} prompts">
+            <div class="category-item" draggable="true" data-action="set-category-view" data-id="${safeId}" data-original-id="${escapeHtml(cat.id)}" role="treeitem" aria-label="${escapeHtml(cat.name)}, ${count} prompts">
+                <span class="drag-handle" title="Drag to reorder">⠿</span>
                 <span class="category-dot" style="background: ${color};"></span>
                 <span class="category-item-name">${escapeHtml(cat.name)}</span>
                 <span class="category-item-count">${count}</span>

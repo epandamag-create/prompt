@@ -1,6 +1,7 @@
 import { state, stateManager } from '../state.js';
 import { viewService } from './view-service.js';
 import { generateId, extractVariables } from '../utils/helpers.js';
+import { STORAGE_KEY } from '../config/constants.js';
 
 class AppInitializer {
     /**
@@ -26,6 +27,9 @@ class AppInitializer {
 
     _setupLifecycle() {
         window.addEventListener('beforeunload', () => stateManager.save(true));
+        window.addEventListener('storage', (e) => {
+            if (e.key === STORAGE_KEY) stateManager.reloadFromTabSync();
+        });
     }
 
     _loadData() {

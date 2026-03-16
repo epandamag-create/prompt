@@ -88,14 +88,26 @@ export const ioController = {
         closeModal('exportModal');
     },
 
-    showExportModal() {
-        // Reset form to defaults
+    showExportModal(scope = 'all') {
         const formatJson = document.querySelector('input[name="exportFormat"][value="json"]');
-        const scopeAll = document.querySelector('input[name="exportScope"][value="all"]');
+        const scopeRadio = document.querySelector(`input[name="exportScope"][value="${scope}"]`);
         if (formatJson) formatJson.checked = true;
-        if (scopeAll) scopeAll.checked = true;
-        
+        if (scopeRadio) scopeRadio.checked = true;
+
+        this._updateExportCount();
+        document.querySelectorAll('input[name="exportScope"]').forEach(radio => {
+            radio.onchange = () => this._updateExportCount();
+        });
+
         openModal('exportModal');
+    },
+
+    _updateExportCount() {
+        const scopeRadio = document.querySelector('input[name="exportScope"]:checked');
+        const scope = scopeRadio ? scopeRadio.value : 'all';
+        const count = scope === 'filtered' ? getFilteredPrompts().length : state.prompts.length;
+        const countEl = document.getElementById('exportScopeCount');
+        if (countEl) countEl.textContent = `${count} prompt${count !== 1 ? 's' : ''} will be exported`;
     },
 
     hideExportModal() {

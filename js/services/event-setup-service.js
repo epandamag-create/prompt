@@ -67,6 +67,12 @@ export function initializeEventListeners() {
     
     // 9. Prompt content hover tooltip
     setupPromptContentHover();
+
+    // 10. Sidebar drag-and-drop reordering
+    setupSidebarDragHandlers();
+
+    // 11. Card hover tracking for hotkeys
+    setupCardHoverTracking();
 }
 
 function setupDropdownCloseHandlers() {
@@ -242,6 +248,77 @@ function setupPromptContentHover() {
                 tooltipEl.style.display = 'none';
             }
         }, 200);
+    });
+}
+
+// ============================================
+// Sidebar Drag-and-Drop Reordering
+// ============================================
+function setupSidebarDragHandlers() {
+    let dragSrcId = null;
+    let dragType = null; // 'collection' or 'category'
+
+    document.addEventListener('dragstart', (e) => {
+        const item = e.target.closest('.collection-item, .category-item');
+        if (!item) return;
+        dragType = item.classList.contains('collection-item') ? 'collection' : 'category';
+        dragSrcId = item.dataset.originalId;
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragSrcId);
+    });
+
+    document.addEventListener('dragend', () => {
+        document.querySelectorAll('.collection-item, .category-item').forEach(el => {
+            el.classList.remove('dragging', 'drag-over');
+        });
+    });
+
+    document.addEventListener('dragover', (e) => {
+        const item = e.target.closest('.collection-item, .category-item');
+        if (!item) return;
+        const type = item.classList.contains('collection-item') ? 'collection' : 'category';
+        if (type !== dragType) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        document.querySelectorAll(`.${dragType}-item`).forEach(el => el.classList.remove('drag-over'));
+        item.classList.add('drag-over');
+    });
+
+    document.addEventListener('drop', (e) => {
+        const item = e.target.closest('.collection-item, .category-item');
+        if (!item) return;
+        const type = item.classList.contains('collection-item') ? 'collection' : 'category';
+        if (type !== dragType) return;
+        e.preventDefault();
+        const dropId = item.dataset.originalId;
+        if (dragSrcId === dropId) return;
+
+        const arr = dragType === 'collection' ? state.collections : state.categories;
+        const fromIdx = arr.findIndex(x => x.id === dragSrcId);
+        const toIdx = arr.findIndex(x => x.id === dropId);
+        if (fromIdx === -1 || toIdx === -1) return;
+
+        arr.splice(toIdx, 0, arr.splice(fromIdx, 1)[0]);
+        stateManager.save();
+        renderAll();
+    });
+}
+
+// ============================================
+// Card Hover Tracking for Hotkeys
+// ============================================
+function setupCardHoverTracking() {
+    document.addEventListener('mouseover', (e) => {
+        const card = e.target.closest('.prompt-card');
+        state.ui.hoveredCardId = card ? card.dataset.originalId : null;
+    });
+
+    document.addEventListener('mouseout', (e) => {
+        const card = e.target.closest('.prompt-card');
+        if (card && !card.contains(e.relatedTarget)) {
+            state.ui.hoveredCardId = null;
+        }
     });
 }
 

@@ -5,6 +5,7 @@ import { extractVariables, copyToClipboard } from '../utils/helpers.js';
 import { closeModal } from '../view/modal.js';
 import { showToast } from '../view/ui.js';
 import { getPromptFormData } from '../view/form.js';
+import { historyService } from './history-service.js';
 
 // Cache for memoization - invalidated when state changes
 let cache = null;
@@ -314,13 +315,25 @@ export const promptService = {
         const isEditing = !!state.editingPromptId;
 
         if (isEditing) {
-            this.update(state.editingPromptId, formData);
+            const id = state.editingPromptId;
+            const before = { ...state.prompts.find(p => p.id === id) };
+            this.update(id, formData);
+            const after = { ...state.prompts.find(p => p.id === id) };
+            historyService.push(
+                () => { stateManager.updatePrompt(id, before); commitAndRender(); },
+                () => { stateManager.updatePrompt(id, after); commitAndRender(); }
+            );
         } else {
-            this.create(formData);
+            const newPrompt = this.create(formData);
+            const id = newPrompt.id;
+            historyService.push(
+                () => { stateManager.deletePrompt(id); commitAndRender(); },
+                () => { stateManager.addPrompt(newPrompt, 0); commitAndRender(); }
+            );
         }
 
         commitAndRender();
-        
+
         closeModal('promptModal');
         showToast(isEditing ? 'Prompt updated!' : 'Prompt created!', 'success');
     },
@@ -332,6 +345,11 @@ export const promptService = {
     deletePrompt(id) {
         const deleted = this.delete(id);
         if (!deleted) return;
+
+        historyService.push(
+            () => { this.restore(deleted); commitAndRender(); showToast('Prompt restored!', 'success'); },
+            () => { this.delete(deleted.prompt.id); commitAndRender(); }
+        );
 
         commitAndRender();
 

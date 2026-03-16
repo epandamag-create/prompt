@@ -56,9 +56,10 @@ _Нет активных задач_
 - [ ] `app-initializer.js` — пример-промпт создаётся как сырой объект вместо `createPromptModel()`
 
 ### Новые функции
-- [ ] Синхронизация вкладок через `window.addEventListener('storage', ...)`
-- [ ] Полноценный стек undo/redo (сейчас только отмена удаления)
-- [ ] Горячие клавиши на карточке: `e` — редактировать, `c` — копировать, `f` — избранное, `del` — удалить
+- [x] Синхронизация вкладок через `window.addEventListener('storage', ...)` — `app-initializer.js`, `state.js` (`reloadFromTabSync()`)
+- [x] Полноценный стек undo/redo (Ctrl+Z / Ctrl+Shift+Z) — новый `history-service.js`, интегрирован в `prompt-service.js` (create/update/delete); `hotkey-manager.js` теперь поддерживает `shift` модификатор
+- [x] Горячие клавиши на карточке: `e` — редактировать, `c` — копировать, `f` — избранное, `del` — удалить — `events.js`, `state.ui.hoveredCardId`, `setupCardHoverTracking()` в `event-setup-service.js`
+- [x] Сортировка коллекций и категорий перетаскиванием (drag-and-drop) — `render.js` (drag handle + draggable), `setupSidebarDragHandlers()` в `event-setup-service.js`, CSS-стили
+- [x] Экспорт только текущего отфильтрованного вида — `io-controller.js` (`showExportModal(scope)`, `_updateExportCount()`), счётчик в модале экспорта
 - [ ] Подтверждение массового удаления через `confirmModal`
 - [ ] Toast-предупреждение при достижении 80% заполненности localStorage (сейчас только `console.warn`)
-- [ ] Экспорт только текущего отфильтрованного вида

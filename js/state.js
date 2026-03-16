@@ -449,6 +449,21 @@ export const stateManager = {
      */
     loadFromStorage() {
         return storageService.load();
+    },
+
+    /**
+     * Reload state from storage (called on cross-tab storage event)
+     */
+    reloadFromTabSync() {
+        const loadedData = storageService.load();
+        if (!loadedData) return;
+        state.prompts = loadedData.prompts ?? [];
+        state.collections = loadedData.collections ?? [];
+        state.categories = loadedData.categories ?? [];
+        state.preferences = { ...state.preferences, ...loadedData.preferences };
+        state.sidebarSections = { ...state.sidebarSections, ...loadedData.sidebarSections };
+        clearPromptCache();
+        renderAll();
     }
 };
 
@@ -486,6 +501,9 @@ export const state = {
         currentConfirmId: 0, // Track current confirm dialog ID for race condition prevention
         
         // Dropdown menus state (instead of DOM .open classes)
-        openDropdowns: new Set()
+        openDropdowns: new Set(),
+
+        // ID of prompt card currently hovered (for card hotkeys)
+        hoveredCardId: null
     }
 };

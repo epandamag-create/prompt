@@ -16,6 +16,7 @@ import { taxonomyController } from './taxonomy-controller.js';
 import { toolbarController } from './toolbar-controller.js';
 import { filterController } from './filter-controller.js';
 import { toggleDropdown, closeDropdown } from '../view/ui.js';
+import { historyService } from '../services/history-service.js';
 
 // ============================================
 // EVENT ROUTER REGISTRATION
@@ -145,6 +146,7 @@ function registerEventHandlers() {
     
     eventRouter.register('import-prompts', () => ioController.importPrompts());
     eventRouter.register('toggle-export-menu', () => ioController.showExportModal());
+    eventRouter.register('export-current-view', () => ioController.showExportModal('filtered'));
     eventRouter.register('hide-export-modal', (el, e) => {
         if (el.classList.contains('modal-overlay') && e.target !== el) return;
         ioController.hideExportModal();
@@ -253,6 +255,8 @@ export function setupEventListeners() {
 // HOTKEYS
 // ============================================
 const APP_HOTKEYS = [
+    { key: 'z', ctrl: true, shift: false, context: 'global', description: 'Undo', handler: () => historyService.undo() },
+    { key: 'z', ctrl: true, shift: true, context: 'global', description: 'Redo', handler: () => historyService.redo() },
     { key: 'Escape', context: 'always', description: 'Close modal', handler: () => modalController.closeTopModal() },
     { key: 's', ctrl: true, context: 'modal', description: 'Save (in modal)', handler: () => modalController.saveCurrentModal() },
     { key: 'b', ctrl: true, context: 'global', description: 'New Prompt', handler: () => modalController.openWithConfig('promptModal', 'add') },
@@ -262,8 +266,24 @@ const APP_HOTKEYS = [
     { key: '\\', context: 'global', description: 'Toggle Sidebar', handler: () => document.getElementById('sidebarToggleBtn').click() },
     // New hotkeys
     { key: 'd', ctrl: true, context: 'global', description: 'Duplicate selected', handler: () => promptController.cloneSelected() },
-    { key: 'Delete', context: 'global', description: 'Delete selected', handler: () => bulkController.deleteSelected() },
     { key: 'p', ctrl: true, context: 'global', description: 'Preview selected', handler: () => promptController.previewSelected() },
+    // Card hotkeys (fire when a card is hovered)
+    { key: 'e', context: 'global', description: 'Edit hovered card', handler: () => {
+        const id = state.ui.hoveredCardId;
+        if (id) { state.editingPromptId = id; modalController.openWithConfig('promptModal', 'edit', state.prompts.find(p => p.id === id)); }
+    }},
+    { key: 'c', context: 'global', description: 'Copy hovered card', handler: () => {
+        const id = state.ui.hoveredCardId;
+        if (id) promptController.copy(id);
+    }},
+    { key: 'f', context: 'global', description: 'Toggle favorite hovered card', handler: () => {
+        const id = state.ui.hoveredCardId;
+        if (id) promptController.toggleFavorite(id);
+    }},
+    { key: 'Delete', context: 'global', description: 'Delete hovered/selected', handler: () => {
+        const id = state.ui.hoveredCardId;
+        if (id) promptController.delete(id); else bulkController.deleteSelected();
+    }},
 ];
 
 // ============================================

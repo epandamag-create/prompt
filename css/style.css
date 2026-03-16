@@ -715,6 +715,26 @@
             background-color: rgba(255, 255, 255, 0.2);
         }
 
+        /* Drag-and-drop reordering */
+        .drag-handle {
+            opacity: 0;
+            cursor: grab;
+            color: var(--text-secondary);
+            font-size: 14px;
+            padding: 0 2px;
+            flex-shrink: 0;
+            transition: opacity var(--transition-fast);
+            user-select: none;
+        }
+        .collection-item:hover .drag-handle,
+        .category-item:hover .drag-handle { opacity: 1; }
+        .collection-item.dragging,
+        .category-item.dragging { opacity: 0.4; }
+        .collection-item.drag-over,
+        .category-item.drag-over {
+            border-top: 2px solid var(--accent);
+        }
+
         .add-collection-btn {
             display: flex;
             align-items: center;
