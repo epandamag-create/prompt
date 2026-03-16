@@ -10,7 +10,7 @@ export const ioController = {
         const fileInput = document.getElementById('importFile');
         const file = fileInput?.files[0];
         const importMode = document.querySelector('input[name="importMode"]:checked')?.value ?? 'merge';
-        
+
         if (!file) {
             return showToast('Please select a file', 'error');
         }
@@ -21,6 +21,14 @@ export const ioController = {
 
         if (!isJson && !isCsv) {
             return showToast('Invalid file type. Please select a JSON or CSV file.', 'error');
+        }
+
+        // Fix #12: Show loading state
+        const importBtn = document.getElementById('importConfirmBtn');
+        const originalText = importBtn?.textContent;
+        if (importBtn) {
+            importBtn.disabled = true;
+            importBtn.textContent = 'Importing…';
         }
 
         try {
@@ -45,6 +53,11 @@ export const ioController = {
         } catch (error) {
             showToast('Error importing file: ' + error.message, 'error');
             console.error('Import error:', error);
+        } finally {
+            if (importBtn) {
+                importBtn.disabled = false;
+                importBtn.textContent = originalText;
+            }
         }
     },
 

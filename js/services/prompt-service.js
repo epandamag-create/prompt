@@ -403,44 +403,70 @@ export const promptService = {
     },
 
     /**
-     * Bulk delete prompts with UI update
+     * Bulk delete prompts with UI update and undo support
      * @param {Set} ids - Set of prompt IDs
      */
     bulkDeletePrompts(ids) {
-        const count = this.bulkDelete(ids);
-        if (count === 0) return;
+        const idsSnapshot = new Set(ids);
+        const deletedPrompts = state.prompts.filter(p => idsSnapshot.has(p.id));
+        if (deletedPrompts.length === 0) return;
+
+        const count = this.bulkDelete(idsSnapshot);
+
+        historyService.push(
+            () => { deletedPrompts.forEach(p => state.prompts.unshift(p)); commitAndRender(); showToast(`${count} prompt${count > 1 ? 's' : ''} restored`, 'success'); },
+            () => { this.bulkDelete(idsSnapshot); commitAndRender(); }
+        );
 
         commitAndRender();
-
         state.ui.selectedPrompts.clear();
-        
-        import('../view/ui.js').then(ui => {
-            ui.updateBulkUI();
-        });
+        import('../view/ui.js').then(ui => ui.updateBulkUI());
 
         showToast(`${count} prompt${count > 1 ? 's' : ''} deleted`, 'success');
     },
 
     /**
-     * Bulk toggle favorites with UI update
+     * Bulk toggle favorites with UI update and undo support
      * @param {Set} ids - Set of prompt IDs
      */
     bulkToggleFavorites(ids) {
-        this.bulkToggleFavorite(ids);
-        commitAndRender(true);
+        const idsSnapshot = new Set(ids);
+        const previousStates = new Map([...idsSnapshot].map(id => {
+            const p = state.prompts.find(x => x.id === id);
+            return [id, p?.favorite ?? false];
+        }));
 
+        this.bulkToggleFavorite(idsSnapshot);
+
+        historyService.push(
+            () => { const pm = getPromptMap(); previousStates.forEach((fav, id) => { const p = pm.get(id); if (p) { p.favorite = fav; p.updatedAt = Date.now(); } }); commitAndRender(true); },
+            () => { this.bulkToggleFavorite(idsSnapshot); commitAndRender(true); }
+        );
+
+        commitAndRender(true);
         showToast('Favorites updated!', 'success');
     },
 
     /**
-     * Bulk move to collection with UI update
+     * Bulk move to collection with UI update and undo support
      * @param {Set} ids - Set of prompt IDs
      * @param {string|null} collectionId - Collection ID
      */
     bulkMoveToCollectionPrompt(ids, collectionId) {
-        this.bulkMoveToCollection(ids, collectionId);
-        commitAndRender();
+        const idsSnapshot = new Set(ids);
+        const previousCollections = new Map([...idsSnapshot].map(id => {
+            const p = state.prompts.find(x => x.id === id);
+            return [id, p?.collectionId ?? null];
+        }));
 
+        this.bulkMoveToCollection(idsSnapshot, collectionId);
+
+        historyService.push(
+            () => { const pm = getPromptMap(); previousCollections.forEach((colId, id) => { const p = pm.get(id); if (p) p.collectionId = colId; }); commitAndRender(); },
+            () => { this.bulkMoveToCollection(idsSnapshot, collectionId); commitAndRender(); }
+        );
+
+        commitAndRender();
         showToast('Prompts moved to collection!', 'success');
     },
 

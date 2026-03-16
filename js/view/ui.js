@@ -4,6 +4,17 @@ import { escapeHtml } from '../utils/helpers.js';
 // --- Toasts ---
 const MAX_TOASTS = 3;
 
+// Fix #7: Use a container div so CSS handles stacking — no offsetHeight reads
+function getToastContainer() {
+    let container = document.getElementById('toastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toastContainer';
+        document.body.appendChild(container);
+    }
+    return container;
+}
+
 export function showToast(message, type = 'success', undoCallback = null) {
     // Remove oldest toasts if limit reached
     while (state.ui.activeToasts.length >= MAX_TOASTS) {
@@ -16,14 +27,14 @@ export function showToast(message, type = 'success', undoCallback = null) {
 
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    
-    const icon = type === 'success' 
+
+    const icon = type === 'success'
         ? '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'
         : '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
-    
+
     let html = `${icon}<span>${escapeHtml(message)}</span>`;
     let undoHandler = null;
-    
+
     if (undoCallback) {
         html += `<button class="toast-undo-btn" style="
             margin-left: 12px; padding: 4px 10px; border-radius: 4px;
@@ -33,70 +44,48 @@ export function showToast(message, type = 'success', undoCallback = null) {
     }
     toast.innerHTML = html;
 
-    // Stack toasts vertically
-    const offset = state.ui.activeToasts.reduce((acc, t) => acc + t.offsetHeight + 8, 0);
-    toast.style.bottom = `${24 + offset}px`;
-
-    document.body.appendChild(toast);
+    getToastContainer().appendChild(toast);
     state.ui.activeToasts.push(toast);
 
     // Add undo handler if needed
     if (undoCallback) {
         const undoBtn = toast.querySelector('.toast-undo-btn');
         let toastClickHandled = false;
-        
-        undoHandler = (e) => {
-            if (toastClickHandled) return;  // Prevent double-click
+
+        undoHandler = () => {
+            if (toastClickHandled) return;
             toastClickHandled = true;
-            
-            if (!state.ui.activeToasts.includes(toast)) return;  // Validate state
-            
+            if (!state.ui.activeToasts.includes(toast)) return;
             undoCallback();
             removeToast(toast);
         };
-        
+
         undoBtn.addEventListener('click', undoHandler);
     }
 
-    // Store handler reference for cleanup
     toast._undoHandler = undoHandler;
-    
+
     setTimeout(() => toast.classList.add('visible'), 10);
-    
-    // Auto-remove after timeout
+
     const displayTime = undoCallback ? 6000 : 3000;
-    setTimeout(() => {
-        removeToast(toast);
-    }, displayTime);
+    setTimeout(() => removeToast(toast), displayTime);
 }
 
 function removeToast(toast) {
     if (!toast || !toast.parentNode) return;
-    
-    // Remove undo handler to prevent memory leaks
+
     if (toast._undoHandler) {
         const undoBtn = toast.querySelector('.toast-undo-btn');
-        if (undoBtn) {
-            undoBtn.removeEventListener('click', toast._undoHandler);
-        }
+        if (undoBtn) undoBtn.removeEventListener('click', toast._undoHandler);
         toast._undoHandler = null;
     }
-    
+
     toast.classList.remove('visible');
     setTimeout(() => {
         const idx = state.ui.activeToasts.indexOf(toast);
         if (idx > -1) state.ui.activeToasts.splice(idx, 1);
         if (toast.parentNode) toast.remove();
-        repositionToasts();
     }, 200);
-}
-
-function repositionToasts() {
-    let offset = 0;
-    state.ui.activeToasts.forEach(t => {
-        t.style.bottom = `${24 + offset}px`;
-        offset += t.offsetHeight + 8;
-    });
 }
 
 // --- Theme & Layout ---

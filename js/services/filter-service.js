@@ -95,9 +95,11 @@ export const filterService = {
     },
 
     /**
-     * Apply current filters and re-render
+     * Apply current filters and re-render.
+     * Fix #16: Clear bulk selection on every view/filter change.
      */
     applyFilters() {
+        state.ui.selectedPrompts.clear();
         clearPromptCache();
         renderAll();
     },

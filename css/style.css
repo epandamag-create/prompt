@@ -82,6 +82,22 @@
             --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.12);
         }
 
+        /* Fix #14: WCAG AA contrast for tag chips in light theme */
+        [data-theme="light"] .tag-chip {
+            color: #333333;
+            background: #e8e8e8;
+            border-color: #cccccc;
+        }
+
+        [data-theme="light"] .tag-chip:hover {
+            color: #111111;
+            background: #d8d8d8;
+        }
+
+        [data-theme="light"] .prompt-tag {
+            color: #2563eb;
+        }
+
         /* Density: Compact */
         [data-density="compact"] {
             --card-padding: 8px;
@@ -877,6 +893,34 @@
             grid-template-columns: 1fr;
         }
 
+        /* Fix #17: Skeleton loading cards */
+        @keyframes skeleton-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .skeleton-card {
+            background: var(--bg-card);
+            border: 1px solid transparent;
+            border-radius: var(--radius-lg);
+            padding: var(--card-padding);
+            min-height: var(--card-min-height);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            animation: skeleton-pulse 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-line {
+            background: var(--border-color);
+            border-radius: 4px;
+            height: 14px;
+        }
+
+        .skeleton-line.short { width: 40%; }
+        .skeleton-line.medium { width: 70%; }
+        .skeleton-line.full { width: 100%; }
+
         .prompt-card {
             background: var(--bg-card);
             border: 1px solid transparent;
@@ -894,6 +938,13 @@
         .prompt-card:hover {
             border-color: var(--border-hover);
             box-shadow: var(--shadow-card-hover);
+        }
+
+        /* Fix #11: Keyboard focus indicator */
+        .prompt-card:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+            border-color: var(--accent);
         }
 
         .prompt-card-header {
@@ -1467,6 +1518,13 @@
             gap: 6px;
         }
 
+        /* Fix #15: Disabled button state */
+        .btn:disabled, button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
         .btn-primary {
             background: var(--accent);
             color: white;
@@ -1516,10 +1574,22 @@
         /* ============================================
            TOAST NOTIFICATIONS
            ============================================ */
-        .toast {
+        /* Fix #7: Container handles stacking — no JS offsetHeight reads */
+        #toastContainer {
             position: fixed;
             bottom: 24px;
             right: 24px;
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 8px;
+            z-index: var(--z-toast);
+            pointer-events: none;
+        }
+
+        .toast {
+            position: relative;
+            bottom: auto;
+            right: auto;
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: var(--radius-md);
@@ -1528,8 +1598,8 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            z-index: var(--z-toast);
-            transform: translateY(100px);
+            pointer-events: auto;
+            transform: translateY(20px);
             opacity: 0;
             transition: all var(--transition-normal);
         }

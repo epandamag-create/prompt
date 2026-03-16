@@ -1,7 +1,7 @@
 // ============================================
 // IMPORTS
 // ============================================
-import { state } from '../state.js';
+import { state, stateVersion } from '../state.js';
 import { getFilteredPrompts } from '../services/prompt-service.js';
 import { sanitizeId, escapeHtml, highlightMarkdown, formatDate } from '../utils/helpers.js';
 import { PAGINATION_THRESHOLD, ITEMS_PER_PAGE, VIEWS } from '../config/constants.js';
@@ -13,6 +13,31 @@ let paginationState = {
     currentPage: 1,
     totalPages: 1
 };
+
+// AbortController for pagination click handler cleanup (Fix #9)
+let paginationAbortController = null;
+
+// Memoized Maps for O(1) lookups — invalidated on stateVersion change (Fix #8)
+let _mapVersion = -1;
+let _categoryMap = null;
+let _collectionMap = null;
+
+function getCategoryMap() {
+    if (_mapVersion !== stateVersion) {
+        _categoryMap = new Map(state.categories.map(c => [c.id, c]));
+        _collectionMap = new Map(state.collections.map(c => [c.id, c]));
+        _mapVersion = stateVersion;
+    }
+    return _categoryMap;
+}
+
+function getCollectionMap() {
+    getCategoryMap(); // ensure maps are fresh
+    return _collectionMap;
+}
+
+// Last render key for avoiding redundant DOM updates (Fix #10)
+let _lastRenderKey = null;
 
 export function renderAll(updates = {}) {
     const renderEverything = Object.keys(updates).length === 0;
@@ -47,10 +72,11 @@ export function renderAll(updates = {}) {
 export function renderPrompts() {
     const grid = document.getElementById('promptGrid');
     if (!grid) return;
-    
+
     const prompts = getFilteredPrompts() || [];
-    
+
     if (prompts.length === 0) {
+        _lastRenderKey = null;
         renderEmptyState(grid);
         updateStats(prompts.length);
         removePagination(document.getElementById('paginationControls'));
@@ -59,41 +85,56 @@ export function renderPrompts() {
 
     // Check if we should use pagination
     const usePagination = prompts.length > PAGINATION_THRESHOLD;
-    
+
     // Calculate which prompts to show
     let promptsToRender = prompts;
+    const prevPage = paginationState.currentPage;
     let currentPage = paginationState.currentPage;
-    
+
     if (usePagination) {
         paginationState.totalPages = Math.ceil(prompts.length / ITEMS_PER_PAGE);
         // Clamp current page to valid range
         if (currentPage < 1) currentPage = 1;
         if (currentPage > paginationState.totalPages) currentPage = paginationState.totalPages;
         paginationState.currentPage = currentPage;
-        
+
         const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
         const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, prompts.length);
         promptsToRender = prompts.slice(startIndex, endIndex);
+
+        // Fix #5: Notify when page was reset due to filter change
+        if (prevPage > 1 && currentPage === 1) {
+            import('../view/ui.js').then(ui => ui.showToast('Page reset to 1', 'success'));
+        }
     } else {
         paginationState.currentPage = 1;
         paginationState.totalPages = 1;
     }
 
-    // Clear empty state if it exists
-    if (grid.querySelector('.empty-state')) {
+    // Fix #10: Skip DOM update if nothing changed
+    const renderKey = `${stateVersion}|${currentPage}|${promptsToRender.map(p => p.id + ':' + (p.updatedAt ?? 0)).join(',')}`;
+    if (renderKey === _lastRenderKey && !grid.querySelector('.empty-state, .skeleton-card')) {
+        updateStats(prompts.length);
+        if (usePagination) renderPagination(grid, prompts);
+        return;
+    }
+    _lastRenderKey = renderKey;
+
+    // Clear empty/skeleton state if it exists
+    if (grid.querySelector('.empty-state, .skeleton-card')) {
         grid.innerHTML = '';
     }
 
-    // Use DocumentFragment for batch DOM insertion
+    // Use DocumentFragment for batch DOM insertion (Fix #8: memoized maps)
     const fragment = document.createDocumentFragment();
-    const categoryMap = new Map(state.categories.map(c => [c.id, c]));
-    const collectionMap = new Map(state.collections.map(c => [c.id, c]));
+    const categoryMap = getCategoryMap();
+    const collectionMap = getCollectionMap();
 
     promptsToRender.forEach(prompt => {
         const card = generatePromptCardHTML(prompt, categoryMap, collectionMap);
         fragment.appendChild(card);
     });
-    
+
     // Single DOM operation instead of multiple appends
     grid.innerHTML = '';
     grid.appendChild(fragment);
@@ -170,11 +211,15 @@ function renderPagination(grid, prompts) {
     html += '</div>';
     pagination.innerHTML = html;
     
-    // Use event delegation - single handler for all buttons
-    const paginationHandler = (e) => {
+    // Fix #9: Use AbortController for clean listener lifecycle
+    if (paginationAbortController) {
+        paginationAbortController.abort();
+    }
+    paginationAbortController = new AbortController();
+
+    pagination.addEventListener('click', (e) => {
         const btn = e.target.closest('.pagination-btn');
         if (!btn) return;
-        
         e.stopPropagation();
         const action = btn.dataset.action;
         if (action === 'page-prev') {
@@ -185,27 +230,17 @@ function renderPagination(grid, prompts) {
             paginationState.currentPage = parseInt(action.replace('page-', ''));
         }
         renderPrompts();
-    };
-    
-    // Remove old handler if exists
-    if (pagination._handler) {
-        pagination.removeEventListener('click', pagination._handler);
-    }
-    pagination._handler = paginationHandler;
-    pagination.addEventListener('click', paginationHandler);
-    
+    }, { signal: paginationAbortController.signal });
+
     return pagination;
 }
 
 function removePagination(pagination) {
-    if (pagination) {
-        // Clean up event handler before removing
-        if (pagination._handler) {
-            pagination.removeEventListener('click', pagination._handler);
-            pagination._handler = null;
-        }
-        pagination.remove();
+    if (paginationAbortController) {
+        paginationAbortController.abort();
+        paginationAbortController = null;
     }
+    if (pagination) pagination.remove();
 }
 
 // ============================================
@@ -337,7 +372,7 @@ export function renderCollections(promptCounts) {
         const color = collection.color || '#3b82f6';
         const safeId = sanitizeId(collection.id);
         return `
-            <div class="collection-item" draggable="true" data-action="set-collection-view" data-id="${safeId}" data-original-id="${escapeHtml(collection.id)}" role="treeitem" aria-label="${escapeHtml(collection.name)}, ${count} prompts">
+            <div class="collection-item" draggable="true" data-action="set-collection-view" data-id="${safeId}" data-original-id="${escapeHtml(collection.id)}" role="treeitem" aria-label="${escapeHtml(collection.name)}, ${count} prompts" title="${escapeHtml(collection.name)}">
                 <span class="drag-handle" title="Drag to reorder">⠿</span>
                 <span class="collection-color-dot" style="background: ${color};"></span>
                 <span class="collection-item-name">${escapeHtml(collection.name)}</span>
@@ -367,7 +402,7 @@ export function renderCategories(categoryCounts) {
         const color = cat.color || '#8b5cf6';
         const safeId = sanitizeId(cat.id);
         return `
-            <div class="category-item" draggable="true" data-action="set-category-view" data-id="${safeId}" data-original-id="${escapeHtml(cat.id)}" role="treeitem" aria-label="${escapeHtml(cat.name)}, ${count} prompts">
+            <div class="category-item" draggable="true" data-action="set-category-view" data-id="${safeId}" data-original-id="${escapeHtml(cat.id)}" role="treeitem" aria-label="${escapeHtml(cat.name)}, ${count} prompts" title="${escapeHtml(cat.name)}">
                 <span class="drag-handle" title="Drag to reorder">⠿</span>
                 <span class="category-dot" style="background: ${color};"></span>
                 <span class="category-item-name">${escapeHtml(cat.name)}</span>
@@ -416,8 +451,8 @@ export function renderFilterBar() {
     if (!bar) return;
     const chips = [];
 
-    const catMap = new Map(state.categories.map(c => [c.id, c]));
-    const colMap = new Map(state.collections.map(c => [c.id, c]));
+    const catMap = getCategoryMap();
+    const colMap = getCollectionMap();
 
     state.currentCategories.forEach(id => {
         const cat = catMap.get(id);
@@ -469,16 +504,22 @@ export function updateSidebarHighlights() {
 }
 
 export function updateContentTitle() {
+    const titleEl = document.getElementById('contentTitle');
+    if (!titleEl) return;
+
+    // Fix #6: Include result count in search title
     if (state.searchQuery) {
-        document.getElementById('contentTitle').textContent = `Search: "${state.searchQuery}"`;
+        const count = getFilteredPrompts().length;
+        titleEl.textContent = `Search: "${state.searchQuery}" (${count} result${count !== 1 ? 's' : ''})`;
         return;
     }
     const parts = [];
     if (state.currentView === VIEWS.FAVORITES) parts.push('Favorites');
     else if (state.currentView === VIEWS.RECENT) parts.push('Recent');
 
-    const catMap = new Map(state.categories.map(c => [c.id, c]));
-    const colMap = new Map(state.collections.map(c => [c.id, c]));
+    // Fix #8: use memoized maps
+    const catMap = getCategoryMap();
+    const colMap = getCollectionMap();
 
     state.currentCategories.forEach(id => {
         const cat = catMap.get(id);
@@ -490,11 +531,7 @@ export function updateContentTitle() {
     });
     state.currentTags.forEach(tag => parts.push('#' + tag));
 
-    if (parts.length === 0) {
-        document.getElementById('contentTitle').textContent = 'All Prompts';
-    } else {
-        document.getElementById('contentTitle').textContent = parts.join(' + ');
-    }
+    titleEl.textContent = parts.length === 0 ? 'All Prompts' : parts.join(' + ');
 }
 
 function updateDropdown(selectId, items, defaultLabel, selectedId) {

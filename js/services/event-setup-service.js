@@ -73,6 +73,9 @@ export function initializeEventListeners() {
 
     // 11. Card hover tracking for hotkeys
     setupCardHoverTracking();
+
+    // 12. Card keyboard navigation
+    setupCardKeyboardNavigation();
 }
 
 function setupDropdownCloseHandlers() {
@@ -126,10 +129,57 @@ function setupFormHandlers() {
             updateCharCounter();
         });
     }
-    
+
+    const promptTitle = document.getElementById('promptTitle');
+    if (promptTitle) {
+        promptTitle.addEventListener('input', () => {
+            const len = promptTitle.value.length;
+            const MAX = 200;
+            let hint = promptTitle.parentNode.querySelector('.title-length-hint');
+            if (!hint) {
+                hint = document.createElement('small');
+                hint.className = 'title-length-hint';
+                hint.style.cssText = 'display:block;font-size:11px;margin-top:2px;';
+                promptTitle.parentNode.appendChild(hint);
+            }
+            if (len > MAX) {
+                hint.textContent = `Title too long: ${len}/${MAX}`;
+                hint.style.color = 'var(--error)';
+                promptTitle.style.borderColor = 'var(--error)';
+            } else if (len > MAX * 0.85) {
+                hint.textContent = `${len}/${MAX} characters`;
+                hint.style.color = 'var(--warning)';
+                promptTitle.style.borderColor = '';
+            } else {
+                hint.textContent = '';
+                promptTitle.style.borderColor = '';
+            }
+        });
+    }
+
     const promptTags = document.getElementById('promptTags');
     if (promptTags) {
-        promptTags.addEventListener('input', (e) => searchController.handleTagInput(e));
+        promptTags.addEventListener('input', (e) => {
+            searchController.handleTagInput(e);
+            const tags = promptTags.value.split(',').map(t => t.trim()).filter(Boolean);
+            const MAX_TAGS = 10;
+            let hint = promptTags.parentNode.querySelector('.tags-count-hint');
+            if (!hint) {
+                hint = document.createElement('small');
+                hint.className = 'tags-count-hint';
+                hint.style.cssText = 'display:block;font-size:11px;margin-top:2px;';
+                promptTags.parentNode.appendChild(hint);
+            }
+            if (tags.length > MAX_TAGS) {
+                hint.textContent = `Too many tags: ${tags.length}/${MAX_TAGS} max`;
+                hint.style.color = 'var(--error)';
+            } else if (tags.length >= MAX_TAGS - 2) {
+                hint.textContent = `${tags.length}/${MAX_TAGS} tags`;
+                hint.style.color = 'var(--warning)';
+            } else {
+                hint.textContent = '';
+            }
+        });
         promptTags.addEventListener('keydown', (e) => searchController.handleTagKeydown(e));
     }
 }
@@ -302,6 +352,33 @@ function setupSidebarDragHandlers() {
         arr.splice(toIdx, 0, arr.splice(fromIdx, 1)[0]);
         stateManager.save();
         renderAll();
+    });
+}
+
+// ============================================
+// Card Arrow-Key Navigation
+// ============================================
+function setupCardKeyboardNavigation() {
+    document.addEventListener('keydown', (e) => {
+        if (state.ui.openModals.size > 0) return;
+        if (document.activeElement && document.activeElement.matches('input, textarea, select')) return;
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+
+        const cards = [...document.querySelectorAll('.prompt-card')];
+        if (cards.length === 0) return;
+
+        e.preventDefault();
+        const currentIndex = cards.indexOf(document.activeElement);
+        let nextIndex;
+
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+            nextIndex = currentIndex < cards.length - 1 ? currentIndex + 1 : 0;
+        } else {
+            nextIndex = currentIndex > 0 ? currentIndex - 1 : cards.length - 1;
+        }
+
+        cards[nextIndex].focus();
+        state.ui.hoveredCardId = cards[nextIndex].dataset.originalId;
     });
 }
 

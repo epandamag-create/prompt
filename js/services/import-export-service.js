@@ -72,6 +72,7 @@ export const importExportService = {
             
             let importedCount = 0;
             let skippedCount = 0;
+            const skippedTitles = [];
 
             // Upsert collections and build old-id → new-id map in one pass
             const collectionIdMap = new Map();
@@ -110,6 +111,7 @@ export const importExportService = {
                         
                         if (exists) {
                             skippedCount++;
+                            skippedTitles.push(p.title);
                             return;
                         }
                     }
@@ -143,11 +145,15 @@ export const importExportService = {
                 : `Replaced with ${importedCount} prompts`;
 
             showToast(message, 'success');
-            
-            return { 
-                success: true, 
-                imported: importedCount, 
-                skipped: skippedCount 
+            if (skippedTitles.length > 0) {
+                console.info(`Skipped ${skippedTitles.length} duplicate prompt(s):`, skippedTitles);
+            }
+
+            return {
+                success: true,
+                imported: importedCount,
+                skipped: skippedCount,
+                skippedTitles
             };
 
         } catch (error) {
@@ -193,6 +199,7 @@ export const importExportService = {
 
             let importedCount = 0;
             let skippedCount = 0;
+            const skippedTitlesCsv = [];
 
             const getOrCreateId = (name, type, items, createModel) => {
                 if (!name) return null;
@@ -211,6 +218,7 @@ export const importExportService = {
                     );
                     if (exists) {
                         skippedCount++;
+                        skippedTitlesCsv.push(p.Title);
                         return;
                     }
                 }
@@ -243,8 +251,11 @@ export const importExportService = {
                 : `Replaced with ${importedCount} prompts from CSV`;
             
             showToast(message, 'success');
+            if (skippedTitlesCsv.length > 0) {
+                console.info(`Skipped ${skippedTitlesCsv.length} duplicate prompt(s) from CSV:`, skippedTitlesCsv);
+            }
 
-            return { success: true, imported: importedCount, skipped: skippedCount };
+            return { success: true, imported: importedCount, skipped: skippedCount, skippedTitles: skippedTitlesCsv };
         } catch (error) {
             console.error('CSV Import error:', error);
             showToast('Failed to import from CSV: ' + error.message, 'error');
