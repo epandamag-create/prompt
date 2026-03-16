@@ -1,7 +1,7 @@
 import { state, stateManager } from '../state.js';
 import { viewService } from './view-service.js';
-import { generateId, extractVariables } from '../utils/helpers.js';
 import { STORAGE_KEY } from '../config/constants.js';
+import { createPromptModel } from '../models/prompt.js';
 
 class AppInitializer {
     /**
@@ -46,23 +46,12 @@ class AppInitializer {
 
     _ensureDefaultContent() {
         if (state.prompts.length === 0) {
-            const content = 'Please review the following {language} code and provide detailed feedback:\n\n{code}\n\nFocus on:\n1. Code quality and best practices\n2. Potential bugs or issues\n3. Performance improvements\n4. Security considerations\n\nPlease provide specific suggestions for improvement.';
-            const examplePrompt = {
-                id: generateId(),
+            const examplePrompt = createPromptModel({
                 title: 'Code Review Request',
                 description: 'Ask AI to review your code and provide feedback',
-                content: content,
-                collectionId: null,
-                categoryId: null,
-                tags: ['coding', 'review', 'example'],
-                variables: extractVariables(content),
-                favorite: false,
-                usageCount: 0,
-                lastUsed: null,
-                createdAt: Date.now(),
-                updatedAt: Date.now()
-            };
-            examplePrompt._searchIndex = [examplePrompt.title, examplePrompt.description, examplePrompt.content, ...examplePrompt.tags].join(' ').toLowerCase();
+                content: 'Please review the following {language} code and provide detailed feedback:\n\n{code}\n\nFocus on:\n1. Code quality and best practices\n2. Potential bugs or issues\n3. Performance improvements\n4. Security considerations\n\nPlease provide specific suggestions for improvement.',
+                tags: ['coding', 'review', 'example']
+            });
             state.prompts.push(examplePrompt);
             stateManager.save();
         }

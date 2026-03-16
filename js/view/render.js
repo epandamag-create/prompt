@@ -469,6 +469,10 @@ export function updateSidebarHighlights() {
 }
 
 export function updateContentTitle() {
+    if (state.searchQuery) {
+        document.getElementById('contentTitle').textContent = `Search: "${state.searchQuery}"`;
+        return;
+    }
     const parts = [];
     if (state.currentView === VIEWS.FAVORITES) parts.push('Favorites');
     else if (state.currentView === VIEWS.RECENT) parts.push('Recent');

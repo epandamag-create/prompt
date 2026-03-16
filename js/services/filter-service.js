@@ -1,6 +1,6 @@
 import { state } from '../state.js';
-import { getFilteredPrompts, clearPromptCache } from './prompt-service.js';
-import { renderPrompts, renderFilterBar, updateContentTitle, updateSidebarHighlights } from '../view/render.js';
+import { clearPromptCache } from './prompt-service.js';
+import { renderAll } from '../view/render.js';
 
 /**
  * Filter Service - Handles search and filtering logic
@@ -11,7 +11,7 @@ export const filterService = {
      * @param {string} query - Search query
      */
     setSearchQuery(query) {
-        state.searchQuery = query.toLowerCase().trim();
+        state.searchQuery = query.trim();
         this.applyFilters();
     },
 
@@ -99,40 +99,7 @@ export const filterService = {
      */
     applyFilters() {
         clearPromptCache();
-        const filtered = this.getFiltered();
-        renderPrompts(filtered);
-        renderFilterBar();
-        updateSidebarHighlights();
-        this.updateTitle();
-    },
-
-    /**
-     * Get filtered prompts based on current filters
-     * @returns {Array} Filtered prompts
-     */
-    getFiltered() {
-        let filtered = getFilteredPrompts();
-        
-        // Additional filters from state
-        if (state.currentCollections.length > 0) {
-            filtered = filtered.filter(p => 
-                p.collectionId && state.currentCollections.includes(p.collectionId)
-            );
-        }
-        
-        if (state.currentCategories.length > 0) {
-            filtered = filtered.filter(p => 
-                p.categoryId && state.currentCategories.includes(p.categoryId)
-            );
-        }
-        
-        if (state.currentTags.length > 0) {
-            filtered = filtered.filter(p => 
-                p.tags && p.tags.some(t => state.currentTags.includes(t))
-            );
-        }
-        
-        return filtered;
+        renderAll();
     },
 
     /**
@@ -167,43 +134,6 @@ export const filterService = {
         }
         
         return parts.length > 0 ? parts.join(' | ') : 'All prompts';
-    },
-
-    /**
-     * Update content title based on current view and filters
-     */
-    updateTitle() {
-        let title = 'All Prompts';
-        
-        if (state.searchQuery) {
-            title = 'Search: "' + state.searchQuery + '"';
-        } else if (state.currentView === 'favorites') {
-            title = 'Favorites';
-        } else if (state.currentView === 'recent') {
-            title = 'Recently Used';
-        } else if (state.currentView === 'frequent') {
-            title = 'Most Used';
-        } else if (state.currentView === 'filtered') {
-            if (state.currentCollections.length > 0) {
-                const names = state.currentCollections.map(id => {
-                    const col = state.collections.find(c => c.id === id);
-                    return col ? col.name : 'Unknown';
-                });
-                title = names.join(', ');
-            } else if (state.currentCategories.length > 0) {
-                const names = state.currentCategories.map(id => {
-                    const cat = state.categories.find(c => c.id === id);
-                    return cat ? cat.name : 'Unknown';
-                });
-                title = names.join(', ');
-            } else if (state.currentTags.length > 0) {
-                title = 'Tag: ' + state.currentTags.join(', ');
-            } else {
-                title = 'All Prompts';
-            }
-        }
-        
-        updateContentTitle(title);
     },
 
     /**

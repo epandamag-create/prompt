@@ -49,11 +49,12 @@ _Нет активных задач_
 ## Планируется
 
 ### Баги
-- [ ] `filter-service.js` — двойная фильтрация: `getFiltered()` повторно применяет фильтры, которые уже применил `getFilteredPrompts()`
-- [ ] `filter-service.js` — `renderPrompts(filtered)` передаёт аргумент, который функция игнорирует; `updateContentTitle(title)` — аналогично
+- [x] `filter-service.js` — двойная фильтрация: удалён `getFiltered()`, `applyFilters()` теперь вызывает `clearPromptCache()` + `renderAll()`
+- [x] `filter-service.js` — удалён дублирующий `updateTitle()`, игнорируемые параметры убраны; `updateContentTitle()` в `render.js` дополнена отображением поискового запроса
 
 ### Рефакторинг
-- [ ] `app-initializer.js` — пример-промпт создаётся как сырой объект вместо `createPromptModel()`
+- [x] `app-initializer.js` — пример-промпт теперь создаётся через `createPromptModel()`
+- [x] `filter-service.js` / `prompt-service.js` — поисковый запрос хранится в `state.searchQuery` в оригинальном регистре; `.toLowerCase()` применяется только при сравнении в `getFilteredPrompts()`
 
 ### Новые функции
 - [x] Синхронизация вкладок через `window.addEventListener('storage', ...)` — `app-initializer.js`, `state.js` (`reloadFromTabSync()`)

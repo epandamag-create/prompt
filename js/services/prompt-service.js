@@ -82,15 +82,13 @@ export function getFilteredPrompts() {
     const collectionMap = new Map(state.collections.map(c => [c.id, c]));
     
     if (state.searchQuery) {
+        const queryLower = state.searchQuery.toLowerCase();
         prompts = prompts.filter(p => {
             const cat = categoryMap.get(p.categoryId);
             const col = collectionMap.get(p.collectionId);
             const dynamicContext = ((cat?.name ?? '') + ' ' + (col?.name || '')).toLowerCase();
-            
-            // Calculate search index on demand if missing (Lazy evaluation)
             const searchIndex = p._searchIndex ?? buildSearchIndex(p);
-            
-            return (searchIndex + ' ' + dynamicContext).includes(state.searchQuery);
+            return (searchIndex + ' ' + dynamicContext).includes(queryLower);
         });
     }
 
