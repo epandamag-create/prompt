@@ -59,14 +59,10 @@ export function createPromptModel(data) {
         createdAt: Date.now(),
         updatedAt: Date.now()
     };
-    // Lazy load search index - use a getter that builds on first access
+    // Lazy-computed search index via getter
     Object.defineProperty(prompt, '_searchIndex', {
         get: function() {
             return buildSearchIndex(this);
-        },
-        set: function(value) {
-            // Allow manual setting (for backwards compatibility)
-            this._cachedSearchIndex = value;
         },
         configurable: true,
         enumerable: false
@@ -91,13 +87,10 @@ export function duplicatePromptModel(original) {
         createdAt: Date.now(),
         updatedAt: Date.now()
     };
-    // Use lazy-loaded search index
+    // Lazy-computed search index via getter
     Object.defineProperty(newPrompt, '_searchIndex', {
         get: function() {
             return buildSearchIndex(this);
-        },
-        set: function(value) {
-            this._cachedSearchIndex = value;
         },
         configurable: true,
         enumerable: false
@@ -105,15 +98,3 @@ export function duplicatePromptModel(original) {
     return newPrompt;
 }
 
-/**
- * Gets the search index for a prompt (uses cache if available)
- * @param {Prompt} prompt - The prompt to get index for
- * @returns {string} The search index
- */
-// Helper to get search index (uses cache if available)
-export function getSearchIndex(prompt) {
-    if (prompt._cachedSearchIndex !== undefined) {
-        return prompt._cachedSearchIndex;
-    }
-    return prompt._searchIndex; // Triggers getter to build
-}

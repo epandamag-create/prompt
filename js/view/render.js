@@ -4,7 +4,9 @@
 import { state } from '../state.js';
 import { getFilteredPrompts } from '../services/prompt-service.js';
 import { sanitizeId, escapeHtml, highlightMarkdown, formatDate } from '../utils/helpers.js';
-import { PAGINATION_THRESHOLD, ITEMS_PER_PAGE } from '../config/constants.js';
+import { PAGINATION_THRESHOLD, ITEMS_PER_PAGE, VIEWS } from '../config/constants.js';
+
+const MAX_PREVIEW_CHARS = 500;
 
 // Pagination state (not moved to constants as it's runtime state)
 let paginationState = {
@@ -225,7 +227,6 @@ function generatePromptCardHTML(prompt, categoryMap, collectionMap) {
     div.dataset.updatedAt = prompt.updatedAt;
     div.dataset.favorite = prompt.favorite;
     
-    const MAX_PREVIEW_CHARS = 500;
     const previewContent = prompt.content.length > MAX_PREVIEW_CHARS 
         ? prompt.content.substring(0, MAX_PREVIEW_CHARS) + '...' 
         : prompt.content;
@@ -322,13 +323,13 @@ function generateEmptyStateHTML(isFiltered) {
 }
 
 function renderEmptyState(grid) {
-    const isFiltered = state.searchQuery || state.currentView !== 'all';
+    const isFiltered = state.searchQuery || state.currentView !== VIEWS.ALL;
     grid.innerHTML = generateEmptyStateHTML(isFiltered);
 }
 
 export function renderCollections(promptCounts) {
     const container = document.getElementById('collectionsList');
-    if (state.collections.length === 0) { container.innerHTML = ''; return; }
+    if (!promptCounts || state.collections.length === 0) { container.innerHTML = ''; return; }
 
     container.innerHTML = state.collections.map(collection => {
         const count = promptCounts[collection.id] || 0;
@@ -357,7 +358,7 @@ export function renderCollections(promptCounts) {
 
 export function renderCategories(categoryCounts) {
     const container = document.getElementById('categoriesList');
-    if (state.categories.length === 0) { container.innerHTML = ''; return; }
+    if (!categoryCounts || state.categories.length === 0) { container.innerHTML = ''; return; }
 
     container.innerHTML = state.categories.map(cat => {
         const count = categoryCounts[cat.id] || 0;
@@ -385,6 +386,7 @@ export function renderCategories(categoryCounts) {
 }
 
 export function renderTags(tagCounts) {
+    if (!tagCounts) return;
     const container = document.getElementById('tagsList');
     const tags = Object.entries(tagCounts).sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -465,8 +467,8 @@ export function updateSidebarHighlights() {
 
 export function updateContentTitle() {
     const parts = [];
-    if (state.currentView === 'favorites') parts.push('Favorites');
-    else if (state.currentView === 'recent') parts.push('Recent');
+    if (state.currentView === VIEWS.FAVORITES) parts.push('Favorites');
+    else if (state.currentView === VIEWS.RECENT) parts.push('Recent');
 
     const catMap = new Map(state.categories.map(c => [c.id, c]));
     const colMap = new Map(state.collections.map(c => [c.id, c]));

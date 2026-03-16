@@ -45,11 +45,7 @@ export function validateAndSanitizeData(data) {
                 return null;
             }
             
-            // Validate ID format if provided
-            if (c.id && !isValidId(c.id)) {
-                errors.push(`Collection #${i+1} (ID: ${oldId ?? 'N/A'}): ${VALIDATION_RULES.collection.id.message}`);
-                // Continue with sanitized ID rather than rejecting
-            }
+            // Note: ID was auto-corrected via sanitizeId() above if invalid
             
             // Validate color if provided
             if (c.color && !isValidHexColor(c.color)) {
@@ -86,11 +82,7 @@ export function validateAndSanitizeData(data) {
                 return null;
             }
             
-            // Validate ID format if provided
-            if (cat.id && !isValidId(cat.id)) {
-                errors.push(`Category #${i+1} (ID: ${oldId ?? 'N/A'}): ${VALIDATION_RULES.category.id.message}`);
-                // Continue with sanitized ID rather than rejecting
-            }
+            // Note: ID was auto-corrected via sanitizeId() above if invalid
             
             // Validate color if provided
             if (cat.color && !isValidHexColor(cat.color)) {
