@@ -128,25 +128,31 @@ export const storageService = {
     },
 
     /**
-     * Save variable values (separate from main data)
+     * Save variable values for a specific prompt
+     * @param {string} promptId - ID of the prompt
      * @param {Object} values - Variable values to save
      */
-    saveVariableValues(values) {
+    saveVariableValues(promptId, values) {
         try {
-            localStorage.setItem(VARIABLE_VALUES_KEY, JSON.stringify(values));
+            const stored = localStorage.getItem(VARIABLE_VALUES_KEY);
+            const all = stored ? JSON.parse(stored) : {};
+            all[promptId] = values;
+            localStorage.setItem(VARIABLE_VALUES_KEY, JSON.stringify(all));
         } catch (error) {
             console.error('Failed to save variable values:', error);
         }
     },
 
     /**
-     * Load variable values
-     * @returns {Object} - Saved variable values
+     * Load variable values for a specific prompt
+     * @param {string} promptId - ID of the prompt
+     * @returns {Object} - Saved variable values for that prompt
      */
-    loadVariableValues() {
+    loadVariableValues(promptId) {
         try {
             const stored = localStorage.getItem(VARIABLE_VALUES_KEY);
-            return stored ? JSON.parse(stored) : {};
+            const all = stored ? JSON.parse(stored) : {};
+            return all[promptId] || {};
         } catch (error) {
             return {};
         }

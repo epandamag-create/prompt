@@ -17,16 +17,7 @@ let tagCache = null;
  * Compute cache key based on current state
  */
 function computeCacheKey() {
-    return JSON.stringify({
-        version: stateVersion,
-        prompts: state.prompts?.length || 0,
-        view: state.currentView,
-        collections: state.currentCollections,
-        categories: state.currentCategories,
-        tags: state.currentTags,
-        search: state.searchQuery,
-        sort: state.preferences.sortBy
-    });
+    return `${stateVersion}|${state.currentView}|${state.searchQuery}|${state.preferences.sortBy}|${state.currentCollections.join(',')}|${state.currentCategories.join(',')}|${state.currentTags.join(',')}`;
 }
 
 /**
@@ -136,9 +127,6 @@ export function clearPromptCache() {
     invalidateTagCache();
 }
 
-// Helper function to save state
-const saveState = () => stateManager.save();
-
 /**
  * Render prompts with optional partial update
  * @param {boolean} onlyPrompts - Only render prompts, not full UI
@@ -151,6 +139,24 @@ function renderPrompts(onlyPrompts = false) {
             render.renderAll({ prompts: true });
         }
     });
+}
+
+/**
+ * Clear cache, save, and re-render in one step
+ * @param {boolean} onlyPrompts - Only render prompts, not full UI
+ */
+function commitAndRender(onlyPrompts = false) {
+    clearPromptCache();
+    stateManager.save();
+    renderPrompts(onlyPrompts);
+}
+
+/**
+ * Build an id→prompt Map for O(1) bulk lookups
+ * @returns {Map<string, Object>}
+ */
+function getPromptMap() {
+    return new Map(state.prompts.map(p => [p.id, p]));
 }
 
 /**
@@ -182,15 +188,13 @@ export const promptService = {
     update(id, formData) {
         const prompt = state.prompts.find(p => p.id === id);
         if (!prompt) return null;
-        
+
         Object.assign(prompt, {
             ...formData,
             variables: extractVariables(formData.content),
             updatedAt: Date.now()
         });
-        
-        prompt._searchIndex = [prompt.title, prompt.description, prompt.content, ...prompt.tags].join(' ').toLowerCase();
-        
+
         return prompt;
     },
 
@@ -200,20 +204,7 @@ export const promptService = {
      * @returns {Object|null} Deleted prompt data or null
      */
     delete(id) {
-        const idx = state.prompts.findIndex(p => p.id === id);
-        if (idx === -1) return null;
-        
-        const prevPrompt = state.prompts[idx - 1];
-        const nextPrompt = state.prompts[idx + 1];
-        const neighbors = {
-            prevId: prevPrompt?.id || null,
-            nextId: nextPrompt?.id || null
-        };
-        
-        const deleted = state.prompts[idx];
-        state.prompts.splice(idx, 1);
-        
-        return { prompt: deleted, neighbors };
+        return stateManager.deletePrompt(id);
     },
 
     /**
@@ -221,20 +212,7 @@ export const promptService = {
      * @param {Object} deleted - Deleted prompt data with neighbors
      */
     restore(deleted) {
-        const { prompt, neighbors } = deleted;
-        let restoreIndex;
-        
-        if (neighbors.nextId) {
-            restoreIndex = state.prompts.findIndex(p => p.id === neighbors.nextId);
-            if (restoreIndex === -1) restoreIndex = state.prompts.length;
-        } else if (neighbors.prevId) {
-            const prevIndex = state.prompts.findIndex(p => p.id === neighbors.prevId);
-            restoreIndex = prevIndex !== -1 ? prevIndex + 1 : state.prompts.length;
-        } else {
-            restoreIndex = 0;
-        }
-        
-        state.prompts.splice(restoreIndex, 0, prompt);
+        stateManager.restorePrompt(deleted);
     },
 
     /**
@@ -297,8 +275,7 @@ export const promptService = {
      * @param {Set} ids - Set of prompt IDs
      */
     bulkToggleFavorite(ids) {
-        // Create Map for O(1) lookup instead of O(n) find per item
-        const promptMap = new Map(state.prompts.map(p => [p.id, p]));
+        const promptMap = getPromptMap();
         
         ids.forEach(id => {
             const prompt = promptMap.get(id);
@@ -315,7 +292,7 @@ export const promptService = {
      * @param {string|null} collectionId - Collection ID
      */
     bulkMoveToCollection(ids, collectionId) {
-        const promptMap = new Map(state.prompts.map(p => [p.id, p]));
+        const promptMap = getPromptMap();
         
         ids.forEach(id => {
             const prompt = promptMap.get(id);
@@ -337,18 +314,12 @@ export const promptService = {
         const isEditing = !!state.editingPromptId;
 
         if (isEditing) {
-            this.update(state.editingPromptId, {
-                ...formData,
-                variables: extractVariables(formData.content),
-                updatedAt: Date.now()
-            });
+            this.update(state.editingPromptId, formData);
         } else {
             this.create(formData);
         }
 
-        clearPromptCache();
-        saveState();
-        renderPrompts();
+        commitAndRender();
         
         closeModal('promptModal');
         showToast(isEditing ? 'Prompt updated!' : 'Prompt created!', 'success');
@@ -361,15 +332,12 @@ export const promptService = {
     deletePrompt(id) {
         const deleted = this.delete(id);
         if (!deleted) return;
-        
-        clearPromptCache();
-        saveState();
-        renderPrompts();
+
+        commitAndRender();
 
         showToast('Prompt deleted', 'success', () => {
             this.restore(deleted);
-            clearPromptCache();
-            renderPrompts();
+            commitAndRender();
             showToast('Prompt restored!', 'success');
         });
     },
@@ -381,11 +349,8 @@ export const promptService = {
     clonePrompt(id) {
         const clone = this.duplicate(id);
         if (!clone) return;
-        
-        clearPromptCache();
-        saveState();
-        renderPrompts();
 
+        commitAndRender();
         showToast('Prompt duplicated!', 'success');
     },
 
@@ -396,10 +361,8 @@ export const promptService = {
     togglePromptFavorite(id) {
         const result = this.toggleFavorite(id);
         if (result === null) return;
-        
-        clearPromptCache();
-        saveState();
-        renderPrompts(true);
+
+        commitAndRender(true);
     },
 
     /**
@@ -413,10 +376,10 @@ export const promptService = {
         copyToClipboard(prompt.content).then(() => {
             prompt.usageCount++;
             prompt.lastUsed = Date.now();
-            
+
             clearPromptCache();
-            saveState();
-            
+            stateManager.save();
+
             showToast('Copied to clipboard!', 'success');
         }).catch(() => {
             showToast('Failed to copy to clipboard', 'error');
@@ -430,10 +393,8 @@ export const promptService = {
     bulkDeletePrompts(ids) {
         const count = this.bulkDelete(ids);
         if (count === 0) return;
-        
-        clearPromptCache();
-        saveState();
-        renderPrompts();
+
+        commitAndRender();
 
         state.ui.selectedPrompts.clear();
         
@@ -450,10 +411,7 @@ export const promptService = {
      */
     bulkToggleFavorites(ids) {
         this.bulkToggleFavorite(ids);
-        
-        clearPromptCache();
-        saveState();
-        renderPrompts(true);
+        commitAndRender(true);
 
         showToast('Favorites updated!', 'success');
     },
@@ -465,10 +423,7 @@ export const promptService = {
      */
     bulkMoveToCollectionPrompt(ids, collectionId) {
         this.bulkMoveToCollection(ids, collectionId);
-        
-        clearPromptCache();
-        saveState();
-        renderPrompts();
+        commitAndRender();
 
         showToast('Prompts moved to collection!', 'success');
     },
@@ -479,7 +434,7 @@ export const promptService = {
      * @param {string|null} categoryId - Category ID
      */
     bulkChangeCategory(ids, categoryId) {
-        const promptMap = new Map(state.prompts.map(p => [p.id, p]));
+        const promptMap = getPromptMap();
         
         ids.forEach(id => {
             const prompt = promptMap.get(id);
@@ -487,10 +442,8 @@ export const promptService = {
                 prompt.categoryId = categoryId;
             }
         });
-        
-        clearPromptCache();
-        saveState();
-        renderPrompts();
+
+        commitAndRender();
 
         showToast('Category updated!', 'success');
     }

@@ -1,5 +1,3 @@
-// c:\Users\User\Downloads\Code\Promt next\js\utils\helpers.js
-
 /**
  * Validates a field value against provided validation rules.
  * @param {any} value - The value to validate

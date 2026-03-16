@@ -140,15 +140,6 @@ export function getPromptTags(prompt) {
     return Array.isArray(prompt?.tags) ? prompt.tags : [];
 }
 
-/**
- * Check if a value is a valid array
- * @param {any} value
- * @returns {boolean}
- */
-export function isValidArray(value) {
-    return Array.isArray(value);
-}
-
 // ============================================
 // STATE MANAGEMENT
 // ============================================

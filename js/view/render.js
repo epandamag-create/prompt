@@ -84,9 +84,11 @@ export function renderPrompts() {
 
     // Use DocumentFragment for batch DOM insertion
     const fragment = document.createDocumentFragment();
-    
+    const categoryMap = new Map(state.categories.map(c => [c.id, c]));
+    const collectionMap = new Map(state.collections.map(c => [c.id, c]));
+
     promptsToRender.forEach(prompt => {
-        const card = generatePromptCardHTML(prompt);
+        const card = generatePromptCardHTML(prompt, categoryMap, collectionMap);
         fragment.appendChild(card);
     });
     
@@ -96,7 +98,7 @@ export function renderPrompts() {
 
     updateStats(prompts.length);
     if (usePagination) {
-        const pagination = renderPagination(grid, prompts);
+        renderPagination(grid, prompts);
     } else {
         removePagination(document.getElementById('paginationControls'));
     }
@@ -207,10 +209,10 @@ function removePagination(pagination) {
 // ============================================
 // RENDERING
 // ============================================
-function generatePromptCardHTML(prompt) {
+function generatePromptCardHTML(prompt, categoryMap, collectionMap) {
     const hasVariables = prompt.variables && prompt.variables.length > 0;
-    const category = state.categories.find(c => c.id === prompt.categoryId);
-    const collection = state.collections.find(c => c.id === prompt.collectionId);
+    const category = categoryMap.get(prompt.categoryId);
+    const collection = collectionMap.get(prompt.collectionId);
     const safeId = sanitizeId(prompt.id);
     const isSelected = state.ui.selectedPrompts.has(prompt.id);
     
@@ -409,12 +411,15 @@ export function renderFilterBar() {
     if (!bar) return;
     const chips = [];
 
+    const catMap = new Map(state.categories.map(c => [c.id, c]));
+    const colMap = new Map(state.collections.map(c => [c.id, c]));
+
     state.currentCategories.forEach(id => {
-        const cat = state.categories.find(c => c.id === id);
+        const cat = catMap.get(id);
         if (cat) chips.push(`<span class="filter-chip" style="background: ${cat.color}22; color: ${cat.color};"><span>${escapeHtml(cat.name)}</span><span class="filter-chip-remove" data-action="set-category-view" data-id="${sanitizeId(id)}">&times;</span></span>`);
     });
     state.currentCollections.forEach(id => {
-        const col = state.collections.find(c => c.id === id);
+        const col = colMap.get(id);
         if (col) chips.push(`<span class="filter-chip" style="background: ${col.color}22; color: ${col.color};"><span>${escapeHtml(col.name)}</span><span class="filter-chip-remove" data-action="set-collection-view" data-id="${sanitizeId(id)}">&times;</span></span>`);
     });
     state.currentTags.forEach(tag => {
@@ -437,23 +442,23 @@ export function updateStats(count) {
 }
 
 export function updateSidebarHighlights() {
-    // Single query for all sidebar items with data-action
     const sidebarItems = document.querySelectorAll('[data-view], [data-id], [data-tag]');
-    
+    const colSet = new Set(state.currentCollections);
+    const catSet = new Set(state.currentCategories);
+    const tagSet = new Set(state.currentTags);
+
     sidebarItems.forEach(item => {
         if (item.classList.contains('quick-access-item')) {
             const isQuickView = ['all', 'favorites', 'recent'].includes(state.currentView);
             item.classList.toggle('active', isQuickView && item.dataset.view === state.currentView);
         } else if (item.classList.contains('collection-item')) {
-            // Use original ID for comparison with state
             const itemId = item.dataset.originalId || item.dataset.id;
-            item.classList.toggle('active', state.currentCollections.includes(itemId));
+            item.classList.toggle('active', colSet.has(itemId));
         } else if (item.classList.contains('category-item')) {
-            // Use original ID for comparison with state
             const itemId = item.dataset.originalId || item.dataset.id;
-            item.classList.toggle('active', state.currentCategories.includes(itemId));
+            item.classList.toggle('active', catSet.has(itemId));
         } else if (item.classList.contains('tag-chip')) {
-            item.classList.toggle('active', state.currentTags.includes(item.dataset.tag));
+            item.classList.toggle('active', tagSet.has(item.dataset.tag));
         }
     });
 }
@@ -463,12 +468,15 @@ export function updateContentTitle() {
     if (state.currentView === 'favorites') parts.push('Favorites');
     else if (state.currentView === 'recent') parts.push('Recent');
 
+    const catMap = new Map(state.categories.map(c => [c.id, c]));
+    const colMap = new Map(state.collections.map(c => [c.id, c]));
+
     state.currentCategories.forEach(id => {
-        const cat = state.categories.find(c => c.id === id);
+        const cat = catMap.get(id);
         if (cat) parts.push(cat.name);
     });
     state.currentCollections.forEach(id => {
-        const col = state.collections.find(c => c.id === id);
+        const col = colMap.get(id);
         if (col) parts.push(col.name);
     });
     state.currentTags.forEach(tag => parts.push('#' + tag));
@@ -480,40 +488,25 @@ export function updateContentTitle() {
     }
 }
 
-export function updateCollectionDropdown(selectedId = null) {
-    const select = document.getElementById('promptCollection');
+function updateDropdown(selectId, items, defaultLabel, selectedId) {
+    const select = document.getElementById(selectId);
     if (!select) return;
-    select.innerHTML = '<option value="">No Collection</option>';
-    state.collections.forEach(collection => {
+    select.innerHTML = `<option value="">${defaultLabel}</option>`;
+    items.forEach(item => {
         const option = document.createElement('option');
-        option.value = collection.id;
-        option.textContent = collection.name;
-        if (selectedId && option.value === selectedId) {
-            option.selected = true;
-        }
+        option.value = item.id;
+        option.textContent = item.name;
         select.appendChild(option);
     });
-    // If selectedId provided and not empty, set it
     if (selectedId) {
         select.value = selectedId;
     }
 }
 
+export function updateCollectionDropdown(selectedId = null) {
+    updateDropdown('promptCollection', state.collections, 'No Collection', selectedId);
+}
+
 export function updateCategoryDropdown(selectedId = null) {
-    const select = document.getElementById('promptCategory');
-    if (!select) return;
-    select.innerHTML = '<option value="">No Category</option>';
-    state.categories.forEach(cat => {
-        const option = document.createElement('option');
-        option.value = cat.id;
-        option.textContent = cat.name;
-        if (selectedId && option.value === selectedId) {
-            option.selected = true;
-        }
-        select.appendChild(option);
-    });
-    // If selectedId provided and not empty, set it
-    if (selectedId) {
-        select.value = selectedId;
-    }
+    updateDropdown('promptCategory', state.categories, 'No Category', selectedId);
 }
