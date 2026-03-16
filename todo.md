@@ -56,6 +56,9 @@ _Нет активных задач_
 - [x] `app-initializer.js` — пример-промпт теперь создаётся через `createPromptModel()`
 - [x] `filter-service.js` / `prompt-service.js` — поисковый запрос хранится в `state.searchQuery` в оригинальном регистре; `.toLowerCase()` применяется только при сравнении в `getFilteredPrompts()`
 
+### Хранилище
+- [x] Внедрён Dexie.js (IndexedDB) вместо localStorage — лимит ~5 МБ → сотни МБ. Новые файлы: `js/services/db.js`, `js/vendor/dexie.mjs`. `storage-service.js` полностью переписан с async API. `state.js`, `app-initializer.js`, `events.js`, `variable-service.js` обновлены под async. Одноразовая миграция данных из localStorage при первом запуске. Синхронизация вкладок сохранена через `promptOrganizerSync` в localStorage.
+
 ### Новые функции
 - [x] Синхронизация вкладок через `window.addEventListener('storage', ...)` — `app-initializer.js`, `state.js` (`reloadFromTabSync()`)
 - [x] Полноценный стек undo/redo (Ctrl+Z / Ctrl+Shift+Z) — новый `history-service.js`, интегрирован в `prompt-service.js` (create/update/delete); `hotkey-manager.js` теперь поддерживает `shift` модификатор

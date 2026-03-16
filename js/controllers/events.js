@@ -289,8 +289,8 @@ const APP_HOTKEYS = [
 // ============================================
 // INIT
 // ============================================
-export function init() {
-    appInitializer.initialize(() => {
+export async function init() {
+    await appInitializer.initialize(() => {
         hotkeyManager.registerAll(APP_HOTKEYS);
         hotkeyManager.init();
         hotkeyManager.renderShortcuts('shortcutsList');

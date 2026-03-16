@@ -1,10 +1,16 @@
-/**
- * Storage Service - Centralized abstraction for all storage operations
- * Replaces direct imports from storage.js in individual services
- */
-import { STORAGE_KEY, VARIABLE_VALUES_KEY } from '../config/constants.js';
+import { db } from './db.js';
+import { VARIABLE_VALUES_KEY } from '../config/constants.js';
 
-// Default fallback structure for corrupted/missing data
+// Key for storing main app data in IndexedDB
+const MAIN_KEY = 'main';
+
+// localStorage keys (tiny, needed for sync signals and fast theme load)
+const PREFS_KEY = 'promptOrganizerPrefs';
+
+// Written on every save so other tabs receive a `storage` event and reload
+// (IndexedDB changes don't trigger the `storage` event across tabs)
+export const SYNC_KEY = 'promptOrganizerSync';
+
 const DEFAULT_DATA = {
     prompts: [],
     collections: [],
@@ -26,42 +32,40 @@ const DEFAULT_DATA = {
 
 export const storageService = {
     /**
-     * Save data to localStorage
-     * @param {Object} data - Data to save
-     * @returns {Object} - { success: boolean, sizeKB?: number, error?: Error }
+     * Save data to IndexedDB.
+     * Also writes preferences to localStorage (for instant theme on page load)
+     * and bumps a sync-signal key so other tabs pick up the change.
+     * @param {Object} data
+     * @returns {Promise<{success: boolean, error?: Error}>}
      */
-    save(data) {
+    async save(data) {
         try {
-            const dataStr = JSON.stringify(data);
-            const sizeInKB = dataStr.length / 1024;
-            const limitKB = 5120; // ~5MB
-            
-            if (limitKB > 0 && sizeInKB > limitKB * 0.8) {
-                console.warn(`LocalStorage usage: ${sizeInKB.toFixed(2)}KB / ${limitKB}KB`);
+            await db.keyval.put({ key: MAIN_KEY, value: data });
+
+            // Preferences stay in localStorage for the inline theme-load script
+            if (data.preferences) {
+                try { localStorage.setItem(PREFS_KEY, JSON.stringify(data.preferences)); } catch (_) {}
             }
-            
-            localStorage.setItem(STORAGE_KEY, dataStr);
-            return { success: true, sizeKB: sizeInKB.toFixed(2) };
+
+            // Trigger storage event in other tabs
+            try { localStorage.setItem(SYNC_KEY, Date.now().toString()); } catch (_) {}
+
+            return { success: true };
         } catch (error) {
-            console.error('Failed to save to localStorage:', error);
+            console.error('Failed to save to IndexedDB:', error);
             return { success: false, error };
         }
     },
 
     /**
-     * Load data from localStorage
-     * @returns {Object|null} - Loaded data or null if empty
+     * Load data from IndexedDB.
+     * @returns {Promise<Object|null>}
      */
-    load() {
+    async load() {
         try {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            if (!stored) {
-                return null;
-            }
-            
-            const parsed = JSON.parse(stored);
-            
-            // Validate and merge with defaults to handle corrupted data
+            const entry = await db.keyval.get(MAIN_KEY);
+            if (!entry) return null;
+            const parsed = entry.value;
             return {
                 prompts: Array.isArray(parsed.prompts) ? parsed.prompts : [],
                 collections: Array.isArray(parsed.collections) ? parsed.collections : [],
@@ -70,108 +74,99 @@ export const storageService = {
                 sidebarSections: { ...DEFAULT_DATA.sidebarSections, ...parsed.sidebarSections }
             };
         } catch (error) {
-            console.error('Error loading from storage:', error);
-            return DEFAULT_DATA;
+            console.error('Error loading from IndexedDB:', error);
+            return null;
         }
     },
 
     /**
-     * Get storage usage info
-     * @returns {Object} - { usedKB: number, totalKB: number, percentUsed: number }
+     * One-time migration from the old localStorage key to IndexedDB.
+     * Only runs if IndexedDB is empty (first load after upgrade).
+     * @returns {Promise<boolean>} true if migration happened
      */
-    getInfo() {
+    async migrateFromLocalStorage() {
+        const existing = await db.keyval.get(MAIN_KEY);
+        if (existing) return false; // Already migrated
+
         try {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            const usedKB = stored ? (stored.length / 1024) : 0;
-            const totalKB = 5120; // ~5MB typical limit
-            return {
-                usedKB: parseFloat(usedKB.toFixed(2)),
-                totalKB,
-                percentUsed: parseFloat(((usedKB / totalKB) * 100).toFixed(1))
-            };
-        } catch (error) {
-            return { usedKB: 0, totalKB: 5120, percentUsed: 0 };
-        }
-    },
+            const stored = localStorage.getItem('promptOrganizerData');
+            if (!stored) return false;
 
-    /**
-     * Clear all app data
-     */
-    clear() {
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem(VARIABLE_VALUES_KEY);
-    },
+            const parsed = JSON.parse(stored);
+            await db.keyval.put({ key: MAIN_KEY, value: parsed });
 
-    /**
-     * Export data as JSON string
-     * @returns {string} - JSON string of all data
-     */
-    exportAsJson() {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        return stored || JSON.stringify(DEFAULT_DATA);
-    },
+            // Migrate variable values
+            const varStored = localStorage.getItem(VARIABLE_VALUES_KEY);
+            if (varStored) {
+                await db.keyval.put({ key: VARIABLE_VALUES_KEY, value: JSON.parse(varStored) });
+                localStorage.removeItem(VARIABLE_VALUES_KEY);
+            }
 
-    /**
-     * Import data from JSON string
-     * @param {string} jsonString - JSON string to import
-     * @returns {boolean} - Success status
-     */
-    importFromJson(jsonString) {
-        try {
-            JSON.parse(jsonString); // Validate
-            localStorage.setItem(STORAGE_KEY, jsonString);
+            localStorage.removeItem('promptOrganizerData');
+            console.log('[storage] Migrated from localStorage to IndexedDB');
             return true;
         } catch (error) {
-            console.error('Invalid JSON for import:', error);
+            console.error('[storage] Migration failed:', error);
             return false;
         }
     },
 
     /**
-     * Save variable values for a specific prompt
-     * @param {string} promptId - ID of the prompt
-     * @param {Object} values - Variable values to save
+     * @returns {Promise<{usedKB: number, totalKB: number, percentUsed: number}>}
      */
-    saveVariableValues(promptId, values) {
+    async getInfo() {
         try {
-            const stored = localStorage.getItem(VARIABLE_VALUES_KEY);
-            const all = stored ? JSON.parse(stored) : {};
+            const entry = await db.keyval.get(MAIN_KEY);
+            const usedKB = entry ? JSON.stringify(entry.value).length / 1024 : 0;
+            return {
+                usedKB: parseFloat(usedKB.toFixed(2)),
+                totalKB: 512 * 1024, // IndexedDB: ~500 MB typical
+                percentUsed: 0       // Not meaningful for IndexedDB
+            };
+        } catch (_) {
+            return { usedKB: 0, totalKB: 512 * 1024, percentUsed: 0 };
+        }
+    },
+
+    /** @returns {Promise<void>} */
+    async clear() {
+        await db.keyval.clear();
+        localStorage.removeItem(PREFS_KEY);
+        localStorage.removeItem(SYNC_KEY);
+    },
+
+    // ─── Variable values ────────────────────────────────────────────────────
+
+    async saveVariableValues(promptId, values) {
+        try {
+            const entry = await db.keyval.get(VARIABLE_VALUES_KEY);
+            const all = entry ? entry.value : {};
             all[promptId] = values;
-            localStorage.setItem(VARIABLE_VALUES_KEY, JSON.stringify(all));
+            await db.keyval.put({ key: VARIABLE_VALUES_KEY, value: all });
         } catch (error) {
             console.error('Failed to save variable values:', error);
         }
     },
 
-    /**
-     * Load variable values for a specific prompt
-     * @param {string} promptId - ID of the prompt
-     * @returns {Object} - Saved variable values for that prompt
-     */
-    loadVariableValues(promptId) {
+    async loadVariableValues(promptId) {
         try {
-            const stored = localStorage.getItem(VARIABLE_VALUES_KEY);
-            const all = stored ? JSON.parse(stored) : {};
+            const entry = await db.keyval.get(VARIABLE_VALUES_KEY);
+            const all = entry ? entry.value : {};
             return all[promptId] || {};
-        } catch (error) {
+        } catch (_) {
             return {};
         }
     },
 
-    /**
-     * Clear variable values for a specific prompt
-     * @param {string} promptId - ID of the prompt
-     */
-    clearVariableValues(promptId) {
+    async clearVariableValues(promptId) {
         try {
-            const stored = localStorage.getItem(VARIABLE_VALUES_KEY);
-            const values = stored ? JSON.parse(stored) : {};
-            delete values[promptId];
-            localStorage.setItem(VARIABLE_VALUES_KEY, JSON.stringify(values));
+            const entry = await db.keyval.get(VARIABLE_VALUES_KEY);
+            if (!entry) return;
+            const all = entry.value;
+            delete all[promptId];
+            await db.keyval.put({ key: VARIABLE_VALUES_KEY, value: all });
         } catch (error) {
             console.error('Failed to clear variable values:', error);
         }
     }
 };
-
-export { DEFAULT_DATA };

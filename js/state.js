@@ -176,13 +176,13 @@ export let stateVersion = 0;
  */
 export const stateManager = {
     /**
-     * Save state to localStorage (with debounce)
-     * @param {boolean} immediate - Save immediately without debounce
+     * Save state to IndexedDB (with debounce).
+     * @param {boolean} immediate - Skip debounce and save right away
      */
     save(immediate = false) {
         clearTimeout(saveTimeout);
-        
-        const doSave = () => {
+
+        const doSave = async () => {
             const data = {
                 prompts: state.prompts,
                 collections: state.collections,
@@ -190,32 +190,16 @@ export const stateManager = {
                 preferences: state.preferences,
                 sidebarSections: state.sidebarSections
             };
-            
-            const result = storageService.save(data);
-            if (!result.success && result.error?.name === 'QuotaExceededError') {
-                const info = storageService.getInfo();
-                const sizeKB = info ? info.sizeKB : 'N/A';
-                
-                if (confirm(
-                    `⚠️ STORAGE FULL\n\n` +
-                    `Your data could not be saved due to storage limits.\n` +
-                    `Current size: ${sizeKB}KB\n` +
-                    `Limit: ~5MB\n\n` +
-                    `IMPORTANT: Your recent changes may be lost!\n\n` +
-                    `Click OK to export all data now (recommended).\n` +
-                    `Click Cancel to continue without saving.`
-                )) {
-                    // Trigger export - will be handled by events.js
-                    window.dispatchEvent(new CustomEvent('app:export-requested'));
-                }
-                console.error('Error saving to storage:', result.error);
-                // Show toast - will be handled by events.js
-                window.dispatchEvent(new CustomEvent('app:toast', { 
-                    detail: { message: 'Failed to save data. Check console for errors.', type: 'error' } 
+
+            const result = await storageService.save(data);
+            if (!result.success) {
+                console.error('Error saving to IndexedDB:', result.error);
+                window.dispatchEvent(new CustomEvent('app:toast', {
+                    detail: { message: 'Failed to save data. Check console for errors.', type: 'error' }
                 }));
             }
         };
-        
+
         if (immediate) {
             doSave();
         } else {
@@ -444,18 +428,18 @@ export const stateManager = {
     },
 
     /**
-     * Load state from localStorage
-     * @returns {Object|null} Loaded data or null
+     * Load state from IndexedDB.
+     * @returns {Promise<Object|null>}
      */
-    loadFromStorage() {
+    async loadFromStorage() {
         return storageService.load();
     },
 
     /**
-     * Reload state from storage (called on cross-tab storage event)
+     * Reload state from IndexedDB (called on cross-tab sync signal).
      */
-    reloadFromTabSync() {
-        const loadedData = storageService.load();
+    async reloadFromTabSync() {
+        const loadedData = await storageService.load();
         if (!loadedData) return;
         state.prompts = loadedData.prompts ?? [];
         state.collections = loadedData.collections ?? [];

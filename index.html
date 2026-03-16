@@ -3,19 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
 
     <title>Prompt Organizer</title>
     <link rel="stylesheet" href="css/style.css">
     <script>
+    // Apply saved theme/density before first paint to avoid flash.
+    // Reads from promptOrganizerPrefs (written by storage-service on every save).
+    // Falls back to the old promptOrganizerData key during first-run migration.
     (function() {
         'use strict';
         try {
-            var stored = localStorage.getItem('promptOrganizerData');
-            if (!stored) return;
-            var data = JSON.parse(stored);
-            if (!data || !data.preferences) return;
-            var prefs = data.preferences;
+            var prefs = null;
+            var stored = localStorage.getItem('promptOrganizerPrefs');
+            if (stored) {
+                prefs = JSON.parse(stored);
+            } else {
+                var old = localStorage.getItem('promptOrganizerData');
+                if (old) { var d = JSON.parse(old); if (d && d.preferences) prefs = d.preferences; }
+            }
+            if (!prefs) return;
             if (prefs.theme) document.documentElement.setAttribute('data-theme', prefs.theme);
             if (prefs.density) document.documentElement.setAttribute('data-density', prefs.density);
         } catch(e) {}

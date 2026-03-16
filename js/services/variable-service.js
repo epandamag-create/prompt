@@ -5,7 +5,7 @@ import { showToast } from '../view/ui.js';
 import { escapeHtml, escapeRegex, generatePlaceholder, copyToClipboard } from '../utils/helpers.js';
 
 export const variableService = {
-    showUsePromptModal(id) {
+    async showUsePromptModal(id) {
         state.usingPromptId = id;
         const prompt = state.prompts.find(p => p.id === id);
         if (!prompt) return;
@@ -15,7 +15,7 @@ export const variableService = {
         const progressContainer = document.getElementById('variableProgress');
         variableInputs.innerHTML = '';
 
-        const savedValues = storageService.loadVariableValues(id);
+        const savedValues = await storageService.loadVariableValues(id);
 
         if (prompt.variables.length > 0) {
             progressContainer.style.display = 'block';
