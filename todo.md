@@ -61,5 +61,5 @@ _Нет активных задач_
 - [x] Горячие клавиши на карточке: `e` — редактировать, `c` — копировать, `f` — избранное, `del` — удалить — `events.js`, `state.ui.hoveredCardId`, `setupCardHoverTracking()` в `event-setup-service.js`
 - [x] Сортировка коллекций и категорий перетаскиванием (drag-and-drop) — `render.js` (drag handle + draggable), `setupSidebarDragHandlers()` в `event-setup-service.js`, CSS-стили
 - [x] Экспорт только текущего отфильтрованного вида — `io-controller.js` (`showExportModal(scope)`, `_updateExportCount()`), счётчик в модале экспорта
-- [ ] Подтверждение массового удаления через `confirmModal`
+- [x] Подтверждение массового удаления через `confirmModal` — уже реализовано в `bulk-controller.js`
 - [ ] Toast-предупреждение при достижении 80% заполненности localStorage (сейчас только `console.warn`)
