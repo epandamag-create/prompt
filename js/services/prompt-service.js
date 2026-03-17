@@ -2,7 +2,6 @@ import { state, stateManager, stateVersion } from '../state.js';
 import { VIEWS, SORT_OPTIONS } from '../config/constants.js';
 import { createPromptModel, duplicatePromptModel, buildSearchIndex } from '../models/prompt.js';
 import { extractVariables, copyToClipboard } from '../utils/helpers.js';
-import { closeModal } from '../view/modal.js';
 import { showToast } from '../view/ui.js';
 import { getPromptFormData } from '../view/form.js';
 import { historyService } from './history-service.js';
@@ -432,9 +431,9 @@ export const promptService = {
      */
     bulkToggleFavorites(ids) {
         const idsSnapshot = new Set(ids);
+        const pm0 = getPromptMap();
         const previousStates = new Map([...idsSnapshot].map(id => {
-            const p = state.prompts.find(x => x.id === id);
-            return [id, p?.favorite ?? false];
+            return [id, pm0.get(id)?.favorite ?? false];
         }));
 
         this.bulkToggleFavorite(idsSnapshot);
@@ -455,9 +454,9 @@ export const promptService = {
      */
     bulkMoveToCollectionPrompt(ids, collectionId) {
         const idsSnapshot = new Set(ids);
+        const pm0 = getPromptMap();
         const previousCollections = new Map([...idsSnapshot].map(id => {
-            const p = state.prompts.find(x => x.id === id);
-            return [id, p?.collectionId ?? null];
+            return [id, pm0.get(id)?.collectionId ?? null];
         }));
 
         this.bulkMoveToCollection(idsSnapshot, collectionId);
@@ -499,9 +498,9 @@ export const promptService = {
      */
     bulkEditTags(ids, mode, tags) {
         const idsSnapshot = new Set(ids);
+        const pm0 = getPromptMap();
         const previousTags = new Map([...idsSnapshot].map(id => {
-            const p = state.prompts.find(x => x.id === id);
-            return [id, [...(p?.tags || [])]];
+            return [id, [...(pm0.get(id)?.tags || [])]];
         }));
 
         function applyTags(p) {
@@ -533,9 +532,9 @@ export const promptService = {
      */
     bulkMoveToCategoryPrompt(ids, categoryId) {
         const idsSnapshot = new Set(ids);
+        const pm0 = getPromptMap();
         const previousCategories = new Map([...idsSnapshot].map(id => {
-            const p = state.prompts.find(x => x.id === id);
-            return [id, p?.categoryId ?? null];
+            return [id, pm0.get(id)?.categoryId ?? null];
         }));
 
         const promptMap = getPromptMap();

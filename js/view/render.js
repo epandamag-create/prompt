@@ -92,7 +92,6 @@ export function renderPrompts() {
 
     // Calculate which prompts to show
     let promptsToRender = prompts;
-    const prevPage = paginationState.currentPage;
     let currentPage = paginationState.currentPage;
 
     if (usePagination) {
@@ -105,11 +104,6 @@ export function renderPrompts() {
         const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
         const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, prompts.length);
         promptsToRender = prompts.slice(startIndex, endIndex);
-
-        // Fix #5: Notify when page was reset due to filter change
-        if (prevPage > 1 && currentPage === 1) {
-            import('../view/ui.js').then(ui => ui.showToast('Page reset to 1', 'success'));
-        }
     } else {
         paginationState.currentPage = 1;
         paginationState.totalPages = 1;
