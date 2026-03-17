@@ -25,10 +25,9 @@ import {
     updateCharCounter, 
     previewVariables 
 } from '../view/form.js';
-import { getFilteredPrompts } from '../services/prompt-service.js';
 import { promptService } from './prompt-service.js';
-import { escapeHtml, debounce } from '../utils/helpers.js';
-import { SEARCH_DEBOUNCE_MS } from '../config/constants.js';
+import { escapeHtml, debounce, throttle } from '../utils/helpers.js';
+import { SEARCH_DEBOUNCE_MS, PROMPT_TITLE_MAX_LENGTH, PROMPT_TAGS_MAX_COUNT } from '../config/constants.js';
 import { renderAll } from '../view/render.js';
 import { searchController } from '../controllers/search-controller.js';
 import { taxonomyController } from '../controllers/taxonomy-controller.js';
@@ -132,26 +131,24 @@ function setupFormHandlers() {
 
     const promptTitle = document.getElementById('promptTitle');
     if (promptTitle) {
+        // Create hint element once at setup, not inside the event handler
+        const titleHint = document.createElement('small');
+        titleHint.className = 'title-length-hint';
+        titleHint.style.cssText = 'display:block;font-size:11px;margin-top:2px;';
+        promptTitle.parentNode.appendChild(titleHint);
+
         promptTitle.addEventListener('input', () => {
             const len = promptTitle.value.length;
-            const MAX = 200;
-            let hint = promptTitle.parentNode.querySelector('.title-length-hint');
-            if (!hint) {
-                hint = document.createElement('small');
-                hint.className = 'title-length-hint';
-                hint.style.cssText = 'display:block;font-size:11px;margin-top:2px;';
-                promptTitle.parentNode.appendChild(hint);
-            }
-            if (len > MAX) {
-                hint.textContent = `Title too long: ${len}/${MAX}`;
-                hint.style.color = 'var(--error)';
+            if (len > PROMPT_TITLE_MAX_LENGTH) {
+                titleHint.textContent = `Title too long: ${len}/${PROMPT_TITLE_MAX_LENGTH}`;
+                titleHint.style.color = 'var(--error)';
                 promptTitle.style.borderColor = 'var(--error)';
-            } else if (len > MAX * 0.85) {
-                hint.textContent = `${len}/${MAX} characters`;
-                hint.style.color = 'var(--warning)';
+            } else if (len > PROMPT_TITLE_MAX_LENGTH * 0.85) {
+                titleHint.textContent = `${len}/${PROMPT_TITLE_MAX_LENGTH} characters`;
+                titleHint.style.color = 'var(--warning)';
                 promptTitle.style.borderColor = '';
             } else {
-                hint.textContent = '';
+                titleHint.textContent = '';
                 promptTitle.style.borderColor = '';
             }
         });
@@ -159,25 +156,23 @@ function setupFormHandlers() {
 
     const promptTags = document.getElementById('promptTags');
     if (promptTags) {
+        // Create hint element once at setup
+        const tagsHint = document.createElement('small');
+        tagsHint.className = 'tags-count-hint';
+        tagsHint.style.cssText = 'display:block;font-size:11px;margin-top:2px;';
+        promptTags.parentNode.appendChild(tagsHint);
+
         promptTags.addEventListener('input', (e) => {
             searchController.handleTagInput(e);
             const tags = promptTags.value.split(',').map(t => t.trim()).filter(Boolean);
-            const MAX_TAGS = 10;
-            let hint = promptTags.parentNode.querySelector('.tags-count-hint');
-            if (!hint) {
-                hint = document.createElement('small');
-                hint.className = 'tags-count-hint';
-                hint.style.cssText = 'display:block;font-size:11px;margin-top:2px;';
-                promptTags.parentNode.appendChild(hint);
-            }
-            if (tags.length > MAX_TAGS) {
-                hint.textContent = `Too many tags: ${tags.length}/${MAX_TAGS} max`;
-                hint.style.color = 'var(--error)';
-            } else if (tags.length >= MAX_TAGS - 2) {
-                hint.textContent = `${tags.length}/${MAX_TAGS} tags`;
-                hint.style.color = 'var(--warning)';
+            if (tags.length > PROMPT_TAGS_MAX_COUNT) {
+                tagsHint.textContent = `Too many tags: ${tags.length}/${PROMPT_TAGS_MAX_COUNT} max`;
+                tagsHint.style.color = 'var(--error)';
+            } else if (tags.length >= PROMPT_TAGS_MAX_COUNT - 2) {
+                tagsHint.textContent = `${tags.length}/${PROMPT_TAGS_MAX_COUNT} tags`;
+                tagsHint.style.color = 'var(--warning)';
             } else {
-                hint.textContent = '';
+                tagsHint.textContent = '';
             }
         });
         promptTags.addEventListener('keydown', (e) => searchController.handleTagKeydown(e));
@@ -257,26 +252,26 @@ function setupPromptContentHover() {
         return tooltipEl;
     }
     
-    document.addEventListener('mouseover', (e) => {
+    document.addEventListener('mouseover', throttle((e) => {
         const contentEl = e.target.closest('.prompt-content');
         if (!contentEl) return;
-        
+
         clearTimeout(hideTimeout);
-        
+
         const content = contentEl.dataset.promptContent;
         if (!content) return;
-        
+
         const tooltip = createTooltip();
         tooltip.textContent = content;
         tooltip.style.display = 'block';
-        
+
         // Position tooltip
         const rect = contentEl.getBoundingClientRect();
         const tooltipRect = tooltip.getBoundingClientRect();
-        
+
         let left = rect.left;
         let top = rect.bottom + 8;
-        
+
         // Keep tooltip within viewport
         if (left + tooltipRect.width > window.innerWidth - 20) {
             left = window.innerWidth - tooltipRect.width - 20;
@@ -284,10 +279,10 @@ function setupPromptContentHover() {
         if (top + tooltipRect.height > window.innerHeight - 20) {
             top = rect.top - tooltipRect.height - 8;
         }
-        
+
         tooltip.style.left = left + 'px';
         tooltip.style.top = top + 'px';
-    });
+    }, 100));
     
     document.addEventListener('mouseout', (e) => {
         const contentEl = e.target.closest('.prompt-content');

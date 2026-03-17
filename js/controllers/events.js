@@ -151,7 +151,6 @@ function registerEventHandlers() {
     });
 
     eventRouter.register('copy-final-prompt', () => variableService.copyFinalPrompt());
-    eventRouter.register('copy-final-prompt', () => promptController.copyFinalPrompt());
     eventRouter.register('clear-variable-values', () => promptController.clearVariableValues());
     
     eventRouter.register('import-prompts', () => ioController.importPrompts());

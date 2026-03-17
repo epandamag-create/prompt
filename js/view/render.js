@@ -22,6 +22,10 @@ let _mapVersion = -1;
 let _categoryMap = null;
 let _collectionMap = null;
 
+// Cached favorites count — recalculated only when stateVersion changes
+let _favCountVersion = -1;
+let _cachedFavCount = 0;
+
 function getCategoryMap() {
     if (_mapVersion !== stateVersion) {
         _categoryMap = new Map(state.categories.map(c => [c.id, c]));
@@ -479,7 +483,11 @@ export function renderFilterBar() {
 export function updateStats(count) {
     document.getElementById('statsDisplay').textContent = `${count} prompt${count !== 1 ? 's' : ''}`;
     document.getElementById('allCount').textContent = state.prompts.length;
-    document.getElementById('favCount').textContent = state.prompts.filter(p => p.favorite).length;
+    if (_favCountVersion !== stateVersion) {
+        _cachedFavCount = state.prompts.reduce((n, p) => n + (p.favorite ? 1 : 0), 0);
+        _favCountVersion = stateVersion;
+    }
+    document.getElementById('favCount').textContent = _cachedFavCount;
 }
 
 export function updateSidebarHighlights() {

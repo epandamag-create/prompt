@@ -41,6 +41,10 @@ export const TOAST_DISPLAY_MS = 3000;
 export const SEARCH_DEBOUNCE_MS = 300;
 export const MODAL_FADE_MS = 200;
 
+// Form validation limits (used in UI hints)
+export const PROMPT_TITLE_MAX_LENGTH = 200;
+export const PROMPT_TAGS_MAX_COUNT = 10;
+
 // Pagination constants
 export const PAGINATION_THRESHOLD = 50;  // Enable pagination at 50+ prompts
 export const ITEMS_PER_PAGE = 50;

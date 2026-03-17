@@ -64,7 +64,12 @@ export const variableService = {
         document.querySelectorAll('.variable-input').forEach(input => {
             const value = input.value.trim();
             if (value) {
-                finalText = finalText.replace(new RegExp('\\{' + escapeRegex(input.dataset.var) + '\\}', 'g'), value);
+                // Cache compiled RegExp on the input element to avoid recompiling on every keystroke
+                if (!input._varRegex) {
+                    input._varRegex = new RegExp('\\{' + escapeRegex(input.dataset.var) + '\\}', 'g');
+                }
+                input._varRegex.lastIndex = 0;
+                finalText = finalText.replace(input._varRegex, value);
             }
         });
 
@@ -99,7 +104,11 @@ export const variableService = {
 
         let finalText = prompt.content;
         inputs.forEach(input => {
-            finalText = finalText.replace(new RegExp('\\{' + escapeRegex(input.dataset.var) + '\\}', 'g'), input.value.trim());
+            if (!input._varRegex) {
+                input._varRegex = new RegExp('\\{' + escapeRegex(input.dataset.var) + '\\}', 'g');
+            }
+            input._varRegex.lastIndex = 0;
+            finalText = finalText.replace(input._varRegex, input.value.trim());
         });
 
         copyToClipboard(finalText).then(() => {

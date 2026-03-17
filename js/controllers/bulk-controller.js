@@ -28,7 +28,7 @@ export const bulkController = {
         if (count === 0) return;
         
         showConfirm(
-            `Delete ${count} selected prompt${count > 1 ? 's' : ''}? You can undo this with Ctrl+Z.`,
+            `Delete ${count} selected prompt${count > 1 ? 's' : ''}? You can undo with Ctrl+Z (this session only — undo history is lost on page reload).`,
             'Bulk Delete',
             'Delete All',
             () => {
