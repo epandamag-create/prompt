@@ -374,26 +374,29 @@ function setupSidebarDragHandlers() {
         if (dragType === 'prompt') {
             item.classList.remove('prompt-drop-target');
             const promptId = dragSrcId;
-            const prompt = state.prompts.find(p => p.id === promptId);
-            if (!prompt) return;
-
             const isCollection = item.classList.contains('collection-item');
             const targetId = item.dataset.originalId;
 
+            // If the dragged card is part of the selection, move all selected prompts
+            const idsToMove = (state.ui.selectedPrompts.size > 0 && state.ui.selectedPrompts.has(promptId))
+                ? state.ui.selectedPrompts
+                : new Set([promptId]);
+
+            const affected = state.prompts.filter(p => idsToMove.has(p.id));
+            if (affected.length === 0) return;
+
             if (isCollection) {
-                const previousId = prompt.collectionId;
-                prompt.collectionId = targetId;
+                affected.forEach(p => { p.collectionId = targetId; });
                 stateManager.bumpVersion();
                 stateManager.save();
                 renderAll();
-                showToast('Moved to collection!', 'success');
+                showToast(`${affected.length > 1 ? affected.length + ' prompts' : '1 prompt'} moved to collection!`, 'success');
             } else {
-                const previousId = prompt.categoryId;
-                prompt.categoryId = targetId;
+                affected.forEach(p => { p.categoryId = targetId; });
                 stateManager.bumpVersion();
                 stateManager.save();
                 renderAll();
-                showToast('Moved to category!', 'success');
+                showToast(`${affected.length > 1 ? affected.length + ' prompts' : '1 prompt'} moved to category!`, 'success');
             }
             return;
         }
