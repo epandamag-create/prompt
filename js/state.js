@@ -390,6 +390,13 @@ export const stateManager = {
     },
 
     /**
+     * Increment the state version counter (for cache invalidation)
+     */
+    bumpVersion() {
+        stateVersion++;
+    },
+
+    /**
      * Delete a category from state
      * @param {string} id - Category ID
      * @returns {Array} IDs of affected prompts

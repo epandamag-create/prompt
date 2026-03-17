@@ -266,6 +266,7 @@ export const promptService = {
     bulkDelete(ids) {
         const count = ids.size;
         state.prompts = state.prompts.filter(p => !ids.has(p.id));
+        stateManager.bumpVersion();
         return count;
     },
 
@@ -414,7 +415,7 @@ export const promptService = {
         const count = this.bulkDelete(idsSnapshot);
 
         historyService.push(
-            () => { deletedPrompts.forEach(p => state.prompts.unshift(p)); commitAndRender(); showToast(`${count} prompt${count > 1 ? 's' : ''} restored`, 'success'); },
+            () => { deletedPrompts.forEach(p => state.prompts.unshift(p)); stateManager.bumpVersion(); commitAndRender(); showToast(`${count} prompt${count > 1 ? 's' : ''} restored`, 'success'); },
             () => { this.bulkDelete(idsSnapshot); commitAndRender(); }
         );
 

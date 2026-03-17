@@ -26,7 +26,12 @@ export const historyService = {
     undo() {
         const entry = this._undoStack.pop();
         if (!entry) return;
-        entry.undo();
+        try {
+            entry.undo();
+        } catch (e) {
+            console.error('[historyService] undo failed:', e);
+            return;
+        }
         this._redoStack.push(entry);
     },
 
@@ -36,7 +41,12 @@ export const historyService = {
     redo() {
         const entry = this._redoStack.pop();
         if (!entry) return;
-        entry.redo();
+        try {
+            entry.redo();
+        } catch (e) {
+            console.error('[historyService] redo failed:', e);
+            return;
+        }
         this._undoStack.push(entry);
     },
 

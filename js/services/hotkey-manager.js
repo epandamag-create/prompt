@@ -44,8 +44,14 @@ class HotkeyManager {
 
         // Find matching hotkey
         const match = this.registry.find(h => {
-            // Check key
-            const keyMatch = h.key.toLowerCase() === e.key.toLowerCase();
+            // Check key — also handle non-Latin keyboard layouts via e.code
+            // (e.g. Russian layout: Ctrl+Z gives e.key='я' in Firefox, but e.code='KeyZ')
+            const keyMatchByKey = h.key.toLowerCase() === e.key.toLowerCase();
+            const expectedCode = h.key.length === 1
+                ? 'key' + h.key.toLowerCase()
+                : h.key.toLowerCase();
+            const keyMatchByCode = e.code && e.code.toLowerCase() === expectedCode;
+            const keyMatch = keyMatchByKey || keyMatchByCode;
             if (!keyMatch) return false;
 
             // Check modifiers
