@@ -750,6 +750,12 @@
         .category-item.drag-over {
             border-top: 2px solid var(--accent);
         }
+        .collection-item.prompt-drop-target,
+        .category-item.prompt-drop-target {
+            background: color-mix(in srgb, var(--accent) 15%, transparent);
+            outline: 2px dashed var(--accent);
+            outline-offset: -2px;
+        }
 
         .add-collection-btn {
             display: flex;

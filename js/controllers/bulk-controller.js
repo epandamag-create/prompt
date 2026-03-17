@@ -70,10 +70,45 @@ export const bulkController = {
             showToast('Please select a collection', 'error');
             return;
         }
-        
+
         const collectionId = selected.value || null;
         promptService.bulkMoveToCollectionPrompt(state.ui.selectedPrompts, collectionId);
         viewService.clearSelection();
         this.hideMoveToCollectionModal(null);
+    },
+
+    showMoveToCategoryModal() {
+        const container = document.getElementById('bulkMoveCategoriesList');
+        if (container && state.categories) {
+            container.innerHTML = state.categories.map(cat => `
+                <label class="dropdown-option bulk-move-option" style="cursor: pointer; padding: 10px; border-radius: var(--radius-md); transition: background var(--transition-fast);">
+                    <input type="radio" name="bulkMoveCategory" value="${escapeHtml(cat.id)}" style="margin-right: 8px; accent-color: var(--accent);">
+                    <strong>${escapeHtml(cat.name)}</strong>
+                </label>
+            `).join('');
+        }
+        const countEl = document.getElementById('bulkMoveCategoryCount');
+        if (countEl) countEl.textContent = state.ui.selectedPrompts.size;
+        openModal('bulkMoveCategoryModal');
+    },
+
+    hideMoveToCategoryModal(event) {
+        modalController.closeWithCheck('bulkMoveCategoryModal', event);
+        document.querySelectorAll('input[name="bulkMoveCategory"]').forEach(input => {
+            input.checked = false;
+        });
+    },
+
+    executeMoveToCategory() {
+        const selected = document.querySelector('input[name="bulkMoveCategory"]:checked');
+        if (!selected) {
+            showToast('Please select a category', 'error');
+            return;
+        }
+
+        const categoryId = selected.value || null;
+        promptService.bulkMoveToCategoryPrompt(state.ui.selectedPrompts, categoryId);
+        viewService.clearSelection();
+        this.hideMoveToCategoryModal(null);
     }
 };

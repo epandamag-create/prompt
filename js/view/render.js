@@ -258,6 +258,7 @@ function generatePromptCardHTML(prompt, categoryMap, collectionMap) {
     div.setAttribute('role', 'article');
     div.setAttribute('aria-label', prompt.title);
     div.setAttribute('tabindex', '0');
+    div.setAttribute('draggable', 'true');
     div.dataset.promptId = safeId;
     div.dataset.originalId = prompt.id;
     div.dataset.updatedAt = prompt.updatedAt;

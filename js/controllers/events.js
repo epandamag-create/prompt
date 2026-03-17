@@ -133,6 +133,11 @@ function registerEventHandlers() {
         bulkController.hideMoveToCollectionModal(e);
     });
 
+    eventRouter.register('hide-bulk-move-category-modal', (el, e) => {
+        if (el.classList.contains('modal-overlay') && e.target !== el) return;
+        bulkController.hideMoveToCategoryModal(e);
+    });
+
     eventRouter.register('hide-confirm-modal', () => modalController.hideConfirm());
 
     // Forms
@@ -153,6 +158,7 @@ function registerEventHandlers() {
     });
     eventRouter.register('execute-export', () => ioController.exportPrompts());
     eventRouter.register('execute-bulk-move', () => bulkController.executeMove());
+    eventRouter.register('execute-bulk-move-category', () => bulkController.executeMoveToCategory());
 
     // Sidebar & Views
     eventRouter.register('toggle-sidebar', () => sidebarController.toggleSidebar());
@@ -220,6 +226,7 @@ function registerEventHandlers() {
     eventRouter.register('bulk-delete', () => bulkController.deleteSelected());
     eventRouter.register('bulk-toggle-favorite', () => bulkController.toggleFavorite());
     eventRouter.register('bulk-move-to-collection', () => bulkController.showMoveToCollectionModal());
+    eventRouter.register('bulk-move-to-category', () => bulkController.showMoveToCategoryModal());
 
     // Tag Suggestions
     eventRouter.register('select-tag-suggestion', (el, e, data) => {

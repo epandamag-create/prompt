@@ -302,13 +302,23 @@ function setupPromptContentHover() {
 }
 
 // ============================================
-// Sidebar Drag-and-Drop Reordering
+// Sidebar Drag-and-Drop Reordering + Prompt Card Drop
 // ============================================
 function setupSidebarDragHandlers() {
     let dragSrcId = null;
-    let dragType = null; // 'collection' or 'category'
+    let dragType = null; // 'collection', 'category', or 'prompt'
 
     document.addEventListener('dragstart', (e) => {
+        // Check prompt card first
+        const card = e.target.closest('.prompt-card');
+        if (card) {
+            dragType = 'prompt';
+            dragSrcId = card.dataset.originalId;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', dragSrcId);
+            return;
+        }
+        // Then sidebar items
         const item = e.target.closest('.collection-item, .category-item');
         if (!item) return;
         dragType = item.classList.contains('collection-item') ? 'collection' : 'category';
@@ -320,13 +330,26 @@ function setupSidebarDragHandlers() {
 
     document.addEventListener('dragend', () => {
         document.querySelectorAll('.collection-item, .category-item').forEach(el => {
-            el.classList.remove('dragging', 'drag-over');
+            el.classList.remove('dragging', 'drag-over', 'prompt-drop-target');
         });
+        dragSrcId = null;
+        dragType = null;
     });
 
     document.addEventListener('dragover', (e) => {
         const item = e.target.closest('.collection-item, .category-item');
         if (!item) return;
+
+        if (dragType === 'prompt') {
+            // Allow dropping prompt card on any collection/category item
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            document.querySelectorAll('.collection-item, .category-item').forEach(el => el.classList.remove('prompt-drop-target'));
+            item.classList.add('prompt-drop-target');
+            return;
+        }
+
+        // Sidebar reordering: only same type
         const type = item.classList.contains('collection-item') ? 'collection' : 'category';
         if (type !== dragType) return;
         e.preventDefault();
@@ -335,12 +358,49 @@ function setupSidebarDragHandlers() {
         item.classList.add('drag-over');
     });
 
+    document.addEventListener('dragleave', (e) => {
+        if (dragType !== 'prompt') return;
+        const item = e.target.closest('.collection-item, .category-item');
+        if (item && !item.contains(e.relatedTarget)) {
+            item.classList.remove('prompt-drop-target');
+        }
+    });
+
     document.addEventListener('drop', (e) => {
         const item = e.target.closest('.collection-item, .category-item');
         if (!item) return;
+        e.preventDefault();
+
+        if (dragType === 'prompt') {
+            item.classList.remove('prompt-drop-target');
+            const promptId = dragSrcId;
+            const prompt = state.prompts.find(p => p.id === promptId);
+            if (!prompt) return;
+
+            const isCollection = item.classList.contains('collection-item');
+            const targetId = item.dataset.originalId;
+
+            if (isCollection) {
+                const previousId = prompt.collectionId;
+                prompt.collectionId = targetId;
+                stateManager.bumpVersion();
+                stateManager.save();
+                renderAll();
+                showToast('Moved to collection!', 'success');
+            } else {
+                const previousId = prompt.categoryId;
+                prompt.categoryId = targetId;
+                stateManager.bumpVersion();
+                stateManager.save();
+                renderAll();
+                showToast('Moved to category!', 'success');
+            }
+            return;
+        }
+
+        // Sidebar reordering
         const type = item.classList.contains('collection-item') ? 'collection' : 'category';
         if (type !== dragType) return;
-        e.preventDefault();
         const dropId = item.dataset.originalId;
         if (dragSrcId === dropId) return;
 

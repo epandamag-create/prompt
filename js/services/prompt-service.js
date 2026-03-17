@@ -478,7 +478,7 @@ export const promptService = {
      */
     bulkChangeCategory(ids, categoryId) {
         const promptMap = getPromptMap();
-        
+
         ids.forEach(id => {
             const prompt = promptMap.get(id);
             if (prompt) {
@@ -489,5 +489,32 @@ export const promptService = {
         commitAndRender();
 
         showToast('Category updated!', 'success');
+    },
+
+    /**
+     * Bulk move to category with UI update and undo support
+     * @param {Set} ids - Set of prompt IDs
+     * @param {string|null} categoryId - Category ID
+     */
+    bulkMoveToCategoryPrompt(ids, categoryId) {
+        const idsSnapshot = new Set(ids);
+        const previousCategories = new Map([...idsSnapshot].map(id => {
+            const p = state.prompts.find(x => x.id === id);
+            return [id, p?.categoryId ?? null];
+        }));
+
+        const promptMap = getPromptMap();
+        idsSnapshot.forEach(id => {
+            const prompt = promptMap.get(id);
+            if (prompt) prompt.categoryId = categoryId;
+        });
+
+        historyService.push(
+            () => { const pm = getPromptMap(); previousCategories.forEach((catId, id) => { const p = pm.get(id); if (p) p.categoryId = catId; }); commitAndRender(); },
+            () => { const pm = getPromptMap(); idsSnapshot.forEach(id => { const p = pm.get(id); if (p) p.categoryId = categoryId; }); commitAndRender(); }
+        );
+
+        commitAndRender();
+        showToast('Prompts moved to category!', 'success');
     }
 };

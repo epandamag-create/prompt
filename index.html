@@ -606,6 +606,41 @@
         </div>
     </div>
 
+    <!-- Bulk Move to Category Modal -->
+    <div class="modal-overlay" id="bulkMoveCategoryModal" data-action="hide-bulk-move-category-modal">
+        <div class="modal modal-confirm">
+            <div class="modal-header">
+                <h2 class="modal-title">Move to Category</h2>
+                <button class="modal-close" data-action="hide-bulk-move-category-modal">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="bulk-move-count-text">
+                    Select a category for <strong id="bulkMoveCategoryCount">0</strong> selected prompts:
+                </p>
+                <div class="bulk-move-list">
+                    <label class="dropdown-option bulk-move-option">
+                        <input type="radio" name="bulkMoveCategory" value="" class="accent-radio" style="margin-right: 8px;">
+                        <strong>No Category</strong> (remove from current)
+                    </label>
+                    <div id="bulkMoveCategoriesList" class="bulk-move-collections-list"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-action="hide-bulk-move-category-modal">Cancel</button>
+                <button class="btn btn-primary" data-action="execute-bulk-move-category">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Move
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Bulk Actions Bar -->
     <div class="bulk-actions-bar" id="bulkActionsBar" role="toolbar" aria-label="Bulk actions">
         <span class="bulk-count" id="bulkCount">0 selected</span>
@@ -613,7 +648,11 @@
         <button class="btn btn-secondary bulk-action-btn-sm" data-action="bulk-select-all">Select All</button>
         <button class="btn btn-secondary bulk-action-btn-sm" data-action="bulk-move-to-collection">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-             Move
+             Collection
+        </button>
+        <button class="btn btn-secondary bulk-action-btn-sm" data-action="bulk-move-to-category">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a2 2 0 012-2z"/></svg>
+             Category
         </button>
         <button class="btn btn-secondary bulk-action-btn-sm" data-action="bulk-toggle-favorite">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
