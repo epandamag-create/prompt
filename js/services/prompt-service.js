@@ -135,7 +135,7 @@ function renderPrompts(onlyPrompts = false) {
         if (onlyPrompts) {
             render.renderPrompts();
         } else {
-            render.renderAll({ prompts: true });
+            render.renderAll();
         }
     });
 }
