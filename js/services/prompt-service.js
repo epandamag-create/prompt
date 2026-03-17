@@ -2,6 +2,7 @@ import { state, stateManager, stateVersion } from '../state.js';
 import { VIEWS, SORT_OPTIONS } from '../config/constants.js';
 import { createPromptModel, duplicatePromptModel, buildSearchIndex } from '../models/prompt.js';
 import { extractVariables, copyToClipboard } from '../utils/helpers.js';
+import { closeModal } from '../view/modal.js';
 import { showToast } from '../view/ui.js';
 import { getPromptFormData } from '../view/form.js';
 import { historyService } from './history-service.js';
@@ -314,9 +315,13 @@ export const promptService = {
 
         if (isEditing) {
             const id = state.editingPromptId;
-            const before = { ...state.prompts.find(p => p.id === id) };
+            const snap = state.prompts.find(p => p.id === id);
+            // Deep-copy array fields so undo/redo restores the original values,
+            // not a reference that mutates along with the live prompt.
+            const before = { ...snap, tags: [...(snap.tags || [])], variables: [...(snap.variables || [])] };
             this.update(id, formData);
-            const after = { ...state.prompts.find(p => p.id === id) };
+            const snapAfter = state.prompts.find(p => p.id === id);
+            const after = { ...snapAfter, tags: [...(snapAfter.tags || [])], variables: [...(snapAfter.variables || [])] };
             historyService.push(
                 () => { stateManager.updatePrompt(id, before); commitAndRender(); },
                 () => { stateManager.updatePrompt(id, after); commitAndRender(); }
