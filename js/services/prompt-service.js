@@ -492,6 +492,41 @@ export const promptService = {
     },
 
     /**
+     * Bulk edit tags with undo support
+     * @param {Set} ids - Set of prompt IDs
+     * @param {'add'|'remove'|'replace'} mode
+     * @param {string[]} tags - Tags to apply
+     */
+    bulkEditTags(ids, mode, tags) {
+        const idsSnapshot = new Set(ids);
+        const previousTags = new Map([...idsSnapshot].map(id => {
+            const p = state.prompts.find(x => x.id === id);
+            return [id, [...(p?.tags || [])]];
+        }));
+
+        function applyTags(p) {
+            const existing = p.tags || [];
+            if (mode === 'add') {
+                p.tags = [...new Set([...existing, ...tags])];
+            } else if (mode === 'remove') {
+                p.tags = existing.filter(t => !tags.includes(t));
+            } else {
+                p.tags = [...tags];
+            }
+        }
+
+        state.prompts.forEach(p => { if (idsSnapshot.has(p.id)) applyTags(p); });
+
+        historyService.push(
+            () => { state.prompts.forEach(p => { if (previousTags.has(p.id)) p.tags = previousTags.get(p.id); }); commitAndRender(); },
+            () => { state.prompts.forEach(p => { if (idsSnapshot.has(p.id)) applyTags(p); }); commitAndRender(); }
+        );
+
+        commitAndRender();
+        showToast(`Tags updated on ${idsSnapshot.size} prompt${idsSnapshot.size > 1 ? 's' : ''}!`, 'success');
+    },
+
+    /**
      * Bulk move to category with UI update and undo support
      * @param {Set} ids - Set of prompt IDs
      * @param {string|null} categoryId - Category ID

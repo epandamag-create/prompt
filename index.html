@@ -571,6 +571,47 @@
         </div>
     </div>
 
+    <!-- Bulk Edit Tags Modal -->
+    <div class="modal-overlay" id="bulkEditTagsModal" data-action="hide-bulk-edit-tags-modal">
+        <div class="modal modal-confirm">
+            <div class="modal-header">
+                <h2 class="modal-title">Edit Tags</h2>
+                <button class="modal-close" data-action="hide-bulk-edit-tags-modal">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="bulk-move-count-text">
+                    Editing tags for <strong id="bulkEditTagsCount">0</strong> selected prompt<span id="bulkEditTagsPlural">s</span>.
+                </p>
+                <div class="bulk-tags-mode-selector">
+                    <button class="bulk-tags-mode-btn active" data-action="bulk-tags-set-mode" data-mode="add">Add Tags</button>
+                    <button class="bulk-tags-mode-btn" data-action="bulk-tags-set-mode" data-mode="remove">Remove Tags</button>
+                    <button class="bulk-tags-mode-btn" data-action="bulk-tags-set-mode" data-mode="replace">Replace All</button>
+                </div>
+                <div class="bulk-tags-current">
+                    <div class="bulk-tags-current-label">Current tags across selected prompts:</div>
+                    <div id="bulkTagsCurrentList" class="bulk-tags-current-list"></div>
+                </div>
+                <div class="form-group" style="margin-top: 16px;">
+                    <label class="form-label" for="bulkTagsInput">Tags (comma-separated)</label>
+                    <input type="text" id="bulkTagsInput" class="form-input" placeholder="e.g. marketing, gpt-4, creative">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-action="hide-bulk-edit-tags-modal">Cancel</button>
+                <button class="btn btn-primary" data-action="execute-bulk-edit-tags">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Apply
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Bulk Move to Collection Modal -->
     <div class="modal-overlay" id="bulkMoveModal" data-action="hide-bulk-move-modal">
         <div class="modal modal-confirm">
@@ -653,6 +694,10 @@
         <button class="btn btn-secondary bulk-action-btn-sm" data-action="bulk-move-to-category">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a2 2 0 012-2z"/></svg>
              Category
+        </button>
+        <button class="btn btn-secondary bulk-action-btn-sm" data-action="bulk-edit-tags">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a2 2 0 012-2z"/></svg>
+             Tags
         </button>
         <button class="btn btn-secondary bulk-action-btn-sm" data-action="bulk-toggle-favorite">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>

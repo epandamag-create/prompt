@@ -99,6 +99,70 @@ export const bulkController = {
         });
     },
 
+    showEditTagsModal() {
+        const ids = state.ui.selectedPrompts;
+        const count = ids.size;
+        if (count === 0) return;
+
+        const countEl = document.getElementById('bulkEditTagsCount');
+        const pluralEl = document.getElementById('bulkEditTagsPlural');
+        if (countEl) countEl.textContent = count;
+        if (pluralEl) pluralEl.textContent = count === 1 ? '' : 's';
+
+        // Collect all unique tags from selected prompts
+        const tagSet = new Set();
+        state.prompts.forEach(p => {
+            if (ids.has(p.id) && p.tags) p.tags.forEach(t => tagSet.add(t));
+        });
+
+        const container = document.getElementById('bulkTagsCurrentList');
+        if (container) {
+            if (tagSet.size === 0) {
+                container.innerHTML = '<span class="bulk-tags-empty">No tags on selected prompts</span>';
+            } else {
+                container.innerHTML = [...tagSet].sort().map(tag =>
+                    `<span class="bulk-tag-badge" data-action="bulk-tags-click-badge" data-tag="${escapeHtml(tag)}">#${escapeHtml(tag)}</span>`
+                ).join('');
+            }
+        }
+
+        // Reset mode to 'add'
+        document.querySelectorAll('.bulk-tags-mode-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === 'add');
+        });
+
+        const input = document.getElementById('bulkTagsInput');
+        if (input) input.value = '';
+
+        openModal('bulkEditTagsModal');
+    },
+
+    hideEditTagsModal(event) {
+        modalController.closeWithCheck('bulkEditTagsModal', event);
+    },
+
+    setTagsMode(mode) {
+        document.querySelectorAll('.bulk-tags-mode-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === mode);
+        });
+    },
+
+    executeEditTags() {
+        const activeBtn = document.querySelector('.bulk-tags-mode-btn.active');
+        const mode = activeBtn ? activeBtn.dataset.mode : 'add';
+        const input = document.getElementById('bulkTagsInput');
+        const tags = input ? input.value.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+        if (tags.length === 0 && mode !== 'replace') {
+            showToast('Please enter at least one tag', 'error');
+            return;
+        }
+
+        promptService.bulkEditTags(state.ui.selectedPrompts, mode, tags);
+        viewService.clearSelection();
+        this.hideEditTagsModal(null);
+    },
+
     executeMoveToCategory() {
         const selected = document.querySelector('input[name="bulkMoveCategory"]:checked');
         if (!selected) {

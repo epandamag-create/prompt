@@ -138,6 +138,11 @@ function registerEventHandlers() {
         bulkController.hideMoveToCategoryModal(e);
     });
 
+    eventRouter.register('hide-bulk-edit-tags-modal', (el, e) => {
+        if (el.classList.contains('modal-overlay') && e.target !== el) return;
+        bulkController.hideEditTagsModal(e);
+    });
+
     eventRouter.register('hide-confirm-modal', () => modalController.hideConfirm());
 
     // Forms
@@ -227,6 +232,18 @@ function registerEventHandlers() {
     eventRouter.register('bulk-toggle-favorite', () => bulkController.toggleFavorite());
     eventRouter.register('bulk-move-to-collection', () => bulkController.showMoveToCollectionModal());
     eventRouter.register('bulk-move-to-category', () => bulkController.showMoveToCategoryModal());
+    eventRouter.register('bulk-edit-tags', () => bulkController.showEditTagsModal());
+    eventRouter.register('bulk-tags-set-mode', (el) => bulkController.setTagsMode(el.dataset.mode));
+    eventRouter.register('bulk-tags-click-badge', (el) => {
+        const input = document.getElementById('bulkTagsInput');
+        if (!input) return;
+        const tag = el.dataset.tag;
+        const existing = input.value.split(',').map(t => t.trim()).filter(Boolean);
+        if (!existing.includes(tag)) {
+            input.value = existing.length ? existing.join(', ') + ', ' + tag : tag;
+        }
+    });
+    eventRouter.register('execute-bulk-edit-tags', () => bulkController.executeEditTags());
 
     // Tag Suggestions
     eventRouter.register('select-tag-suggestion', (el, e, data) => {
