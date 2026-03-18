@@ -15,6 +15,7 @@ import { promptController } from './prompt-controller.js';
 import { taxonomyController } from './taxonomy-controller.js';
 import { toolbarController } from './toolbar-controller.js';
 import { filterController } from './filter-controller.js';
+import { variableService } from '../services/variable-service.js';
 import { toggleDropdown, closeDropdown } from '../view/ui.js';
 import { historyService } from '../services/history-service.js';
 
