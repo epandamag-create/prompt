@@ -422,24 +422,37 @@ export function renderCategories(categoryCounts) {
     }).join('');
 }
 
+const TAGS_VISIBLE_COUNT = 15;
+
 export function renderTags(tagCounts) {
     if (!tagCounts) return;
     const container = document.getElementById('tagsList');
-    const tags = Object.entries(tagCounts).sort((a, b) => a[0].localeCompare(b[0]));
+    // Sort by usage count descending, then alphabetically for equal counts
+    const tags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 
     if (tags.length === 0) {
         container.innerHTML = '<div style="padding: 4px 8px; color: var(--text-muted); font-size: 12px;">No tags yet</div>';
         return;
     }
 
-    container.className = 'tags-cloud';
-    container.innerHTML = tags.map(([tag, count]) => {
-        return `
-        <div class="tag-chip" data-action="set-tag-view" data-tag="${escapeHtml(tag)}" role="treeitem" aria-label="Tag ${escapeHtml(tag)}, ${count} prompts">
+    const visible = tags.slice(0, TAGS_VISIBLE_COUNT);
+    const hidden = tags.slice(TAGS_VISIBLE_COUNT);
+
+    const chipHTML = ([tag, count], extraClass = '') => `
+        <div class="tag-chip${extraClass}" data-action="set-tag-view" data-tag="${escapeHtml(tag)}" role="treeitem" aria-label="Tag ${escapeHtml(tag)}, ${count} prompts">
             <span>#${escapeHtml(tag)}</span>
             <span class="tag-count">${count}</span>
         </div>`;
-    }).join('');
+
+    const moreBtn = hidden.length > 0
+        ? `<button class="tag-more-btn" data-action="toggle-tags-more">+${hidden.length} more</button>`
+        : '';
+
+    container.className = 'tags-cloud';
+    container.innerHTML =
+        visible.map(t => chipHTML(t)).join('') +
+        hidden.map(t => chipHTML(t, ' tag-chip--hidden')).join('') +
+        moreBtn;
 }
 
 // ============================================

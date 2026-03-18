@@ -191,6 +191,16 @@ function registerEventHandlers() {
         filterController.toggleTag(data.tag);
     });
 
+    eventRouter.register('toggle-tags-more', (el) => {
+        const cloud = el.closest('.tags-cloud');
+        if (!cloud) return;
+        const hidden = cloud.querySelectorAll('.tag-chip--hidden');
+        const expanded = el.dataset.expanded === 'true';
+        hidden.forEach(chip => chip.classList.toggle('tag-chip--hidden', expanded));
+        el.dataset.expanded = expanded ? 'false' : 'true';
+        el.textContent = expanded ? `+${hidden.length} more` : 'Show less';
+    });
+
     // Tag click in prompt card
     eventRouter.register('filter-tag', (el, e, data) => {
         e.stopPropagation();
