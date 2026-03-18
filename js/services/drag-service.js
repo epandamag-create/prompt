@@ -95,10 +95,11 @@ function _handlePromptDrop(item, promptId) {
     const affected = state.prompts.filter(p => idsToMove.has(p.id));
     if (affected.length === 0) return;
 
+    const now = Date.now();
     if (isCollection) {
-        affected.forEach(p => { p.collectionId = targetId; });
+        affected.forEach(p => { p.collectionId = targetId; p.updatedAt = now; });
     } else {
-        affected.forEach(p => { p.categoryId = targetId; });
+        affected.forEach(p => { p.categoryId = targetId; p.updatedAt = now; });
     }
 
     // Use granular commit: collection/category counts in sidebar need refreshing
