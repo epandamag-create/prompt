@@ -26,9 +26,9 @@ import {
     previewVariables 
 } from '../view/form.js';
 import { promptService } from './prompt-service.js';
+import { setupDragHandlers } from './drag-service.js';
 import { escapeHtml, debounce, throttle } from '../utils/helpers.js';
 import { SEARCH_DEBOUNCE_MS, PROMPT_TITLE_MAX_LENGTH, PROMPT_TAGS_MAX_COUNT } from '../config/constants.js';
-import { renderAll } from '../view/render.js';
 import { searchController } from '../controllers/search-controller.js';
 import { taxonomyController } from '../controllers/taxonomy-controller.js';
 
@@ -67,8 +67,8 @@ export function initializeEventListeners() {
     // 9. Prompt content hover tooltip
     setupPromptContentHover();
 
-    // 10. Sidebar drag-and-drop reordering
-    setupSidebarDragHandlers();
+    // 10. Sidebar drag-and-drop reordering + prompt card drop
+    setupDragHandlers();
 
     // 11. Card hover tracking for hotkeys
     setupCardHoverTracking();
@@ -296,122 +296,7 @@ function setupPromptContentHover() {
     });
 }
 
-// ============================================
-// Sidebar Drag-and-Drop Reordering + Prompt Card Drop
-// ============================================
-function setupSidebarDragHandlers() {
-    let dragSrcId = null;
-    let dragType = null; // 'collection', 'category', or 'prompt'
-
-    document.addEventListener('dragstart', (e) => {
-        // Check prompt card first
-        const card = e.target.closest('.prompt-card');
-        if (card) {
-            dragType = 'prompt';
-            dragSrcId = card.dataset.originalId;
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', dragSrcId);
-            return;
-        }
-        // Then sidebar items
-        const item = e.target.closest('.collection-item, .category-item');
-        if (!item) return;
-        dragType = item.classList.contains('collection-item') ? 'collection' : 'category';
-        dragSrcId = item.dataset.originalId;
-        item.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', dragSrcId);
-    });
-
-    document.addEventListener('dragend', () => {
-        document.querySelectorAll('.collection-item, .category-item').forEach(el => {
-            el.classList.remove('dragging', 'drag-over', 'prompt-drop-target');
-        });
-        dragSrcId = null;
-        dragType = null;
-    });
-
-    document.addEventListener('dragover', (e) => {
-        const item = e.target.closest('.collection-item, .category-item');
-        if (!item) return;
-
-        if (dragType === 'prompt') {
-            // Allow dropping prompt card on any collection/category item
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            document.querySelectorAll('.collection-item, .category-item').forEach(el => el.classList.remove('prompt-drop-target'));
-            item.classList.add('prompt-drop-target');
-            return;
-        }
-
-        // Sidebar reordering: only same type
-        const type = item.classList.contains('collection-item') ? 'collection' : 'category';
-        if (type !== dragType) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        document.querySelectorAll(`.${dragType}-item`).forEach(el => el.classList.remove('drag-over'));
-        item.classList.add('drag-over');
-    });
-
-    document.addEventListener('dragleave', (e) => {
-        if (dragType !== 'prompt') return;
-        const item = e.target.closest('.collection-item, .category-item');
-        if (item && !item.contains(e.relatedTarget)) {
-            item.classList.remove('prompt-drop-target');
-        }
-    });
-
-    document.addEventListener('drop', (e) => {
-        const item = e.target.closest('.collection-item, .category-item');
-        if (!item) return;
-        e.preventDefault();
-
-        if (dragType === 'prompt') {
-            item.classList.remove('prompt-drop-target');
-            const promptId = dragSrcId;
-            const isCollection = item.classList.contains('collection-item');
-            const targetId = item.dataset.originalId;
-
-            // If the dragged card is part of the selection, move all selected prompts
-            const idsToMove = (state.ui.selectedPrompts.size > 0 && state.ui.selectedPrompts.has(promptId))
-                ? state.ui.selectedPrompts
-                : new Set([promptId]);
-
-            const affected = state.prompts.filter(p => idsToMove.has(p.id));
-            if (affected.length === 0) return;
-
-            if (isCollection) {
-                affected.forEach(p => { p.collectionId = targetId; });
-                stateManager.bumpVersion();
-                stateManager.save();
-                renderAll();
-                showToast(`${affected.length > 1 ? affected.length + ' prompts' : '1 prompt'} moved to collection!`, 'success');
-            } else {
-                affected.forEach(p => { p.categoryId = targetId; });
-                stateManager.bumpVersion();
-                stateManager.save();
-                renderAll();
-                showToast(`${affected.length > 1 ? affected.length + ' prompts' : '1 prompt'} moved to category!`, 'success');
-            }
-            return;
-        }
-
-        // Sidebar reordering
-        const type = item.classList.contains('collection-item') ? 'collection' : 'category';
-        if (type !== dragType) return;
-        const dropId = item.dataset.originalId;
-        if (dragSrcId === dropId) return;
-
-        const arr = dragType === 'collection' ? state.collections : state.categories;
-        const fromIdx = arr.findIndex(x => x.id === dragSrcId);
-        const toIdx = arr.findIndex(x => x.id === dropId);
-        if (fromIdx === -1 || toIdx === -1) return;
-
-        arr.splice(toIdx, 0, arr.splice(fromIdx, 1)[0]);
-        stateManager.save();
-        renderAll();
-    });
-}
+// Drag-and-drop logic has been extracted to drag-service.js
 
 // ============================================
 // Card Arrow-Key Navigation

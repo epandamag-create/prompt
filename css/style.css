@@ -1,3 +1,20 @@
+/*
+ * CSS Layer Declaration
+ * ─────────────────────
+ * Establishes cascade priority (lowest → highest specificity).
+ *
+ *   @layer base       — resets, CSS custom properties, typography
+ *   @layer layout     — header, sidebar, main-content structure
+ *   @layer components — cards, modals, toasts, forms, buttons
+ *   @layer utilities  — density variants, view-mode overrides
+ *   @layer themes     — light-theme token overrides
+ *
+ * Rules not yet wrapped in a named layer fall outside the layer
+ * system and always win, maintaining full backwards compatibility
+ * while allowing gradual migration to @layer blocks.
+ */
+@layer base, layout, components, utilities, themes;
+
           /* ============================================
            CSS VARIABLES (Dark Theme - Default)
            ============================================ */
@@ -62,40 +79,43 @@
             --z-toast: 3000;
         }
 
-        /* Light Theme */
-        [data-theme="light"] {
-            --bg-main: #f5f5f5;
-            --bg-card: #ffffff;
-            --bg-sidebar: #fafafa;
-            --bg-header: #ffffff;
-            --bg-input: #f0f0f0;
-            --bg-code: #f8f8f8;
+        /* Light Theme — wrapped in @layer themes so base/component rules can
+           use lower specificity without accidentally beating theme tokens. */
+        @layer themes {
+            [data-theme="light"] {
+                --bg-main: #f5f5f5;
+                --bg-card: #ffffff;
+                --bg-sidebar: #fafafa;
+                --bg-header: #ffffff;
+                --bg-input: #f0f0f0;
+                --bg-code: #f8f8f8;
 
-            --text-primary: #1a1a1a;
-            --text-secondary: #555555;
-            --text-muted: #888888;
+                --text-primary: #1a1a1a;
+                --text-secondary: #555555;
+                --text-muted: #888888;
 
-            --border-color: #e0e0e0;
-            --border-hover: #cccccc;
+                --border-color: #e0e0e0;
+                --border-hover: #cccccc;
 
-            --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
-            --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.12);
-        }
+                --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
+                --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.12);
+            }
 
-        /* Fix #14: WCAG AA contrast for tag chips in light theme */
-        [data-theme="light"] .tag-chip {
-            color: #333333;
-            background: #e8e8e8;
-            border-color: #cccccc;
-        }
+            /* WCAG AA contrast for tag chips in light theme */
+            [data-theme="light"] .tag-chip {
+                color: #333333;
+                background: #e8e8e8;
+                border-color: #cccccc;
+            }
 
-        [data-theme="light"] .tag-chip:hover {
-            color: #111111;
-            background: #d8d8d8;
-        }
+            [data-theme="light"] .tag-chip:hover {
+                color: #111111;
+                background: #d8d8d8;
+            }
 
-        [data-theme="light"] .prompt-tag {
-            color: #2563eb;
+            [data-theme="light"] .prompt-tag {
+                color: #2563eb;
+            }
         }
 
         /* Density: Compact */

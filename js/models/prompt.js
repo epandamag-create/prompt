@@ -42,7 +42,6 @@ export function buildSearchIndex(prompt) {
  * @param {PromptFormData} data - Form data for the prompt
  * @returns {Prompt} New prompt object
  */
-// Lazy-loaded search index - only built when needed
 export function createPromptModel(data) {
     const prompt = {
         id: generateId(),
@@ -59,11 +58,11 @@ export function createPromptModel(data) {
         createdAt: Date.now(),
         updatedAt: Date.now()
     };
-    // Lazy-computed search index via getter
+    // Cached search index — computed once, updated explicitly on edit.
+    // Non-enumerable so it is not serialised to IndexedDB or JSON exports.
     Object.defineProperty(prompt, '_searchIndex', {
-        get: function() {
-            return buildSearchIndex(this);
-        },
+        value: buildSearchIndex(prompt),
+        writable: true,
         configurable: true,
         enumerable: false
     });
@@ -87,11 +86,9 @@ export function duplicatePromptModel(original) {
         createdAt: Date.now(),
         updatedAt: Date.now()
     };
-    // Lazy-computed search index via getter
     Object.defineProperty(newPrompt, '_searchIndex', {
-        get: function() {
-            return buildSearchIndex(this);
-        },
+        value: buildSearchIndex(newPrompt),
+        writable: true,
         configurable: true,
         enumerable: false
     });

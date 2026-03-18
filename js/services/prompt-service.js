@@ -3,7 +3,7 @@ import { VIEWS, SORT_OPTIONS } from '../config/constants.js';
 import { createPromptModel, duplicatePromptModel, buildSearchIndex } from '../models/prompt.js';
 import { extractVariables, copyToClipboard } from '../utils/helpers.js';
 import { closeModal } from '../view/modal.js';
-import { showToast } from '../view/ui.js';
+import { showToast, updateBulkUI } from '../view/ui.js';
 import { getPromptFormData } from '../view/form.js';
 import { historyService } from './history-service.js';
 
@@ -127,27 +127,14 @@ export function clearPromptCache() {
 }
 
 /**
- * Render prompts with optional partial update
- * @param {boolean} onlyPrompts - Only render prompts, not full UI
+ * Commit state, save, and re-render.
+ * Pass `{ prompts: true }` to skip sidebar re-render when only card data changed.
+ * Delegates to stateManager.commit() which calls renderAll() synchronously,
+ * avoiding the async dynamic-import anti-pattern.
+ * @param {Object} [updates] - Partial render hints forwarded to renderAll
  */
-function renderPrompts(onlyPrompts = false) {
-    import('../view/render.js').then(render => {
-        if (onlyPrompts) {
-            render.renderPrompts();
-        } else {
-            render.renderAll();
-        }
-    });
-}
-
-/**
- * Clear cache, save, and re-render in one step
- * @param {boolean} onlyPrompts - Only render prompts, not full UI
- */
-function commitAndRender(onlyPrompts = false) {
-    clearPromptCache();
-    stateManager.save();
-    renderPrompts(onlyPrompts);
+function commitAndRender(updates = {}) {
+    stateManager.commit(updates);
 }
 
 /**
@@ -193,6 +180,9 @@ export const promptService = {
             variables: extractVariables(formData.content),
             updatedAt: Date.now()
         });
+
+        // Refresh cached search index after content-related fields change
+        prompt._searchIndex = buildSearchIndex(prompt);
 
         return prompt;
     },
@@ -383,7 +373,7 @@ export const promptService = {
         const result = this.toggleFavorite(id);
         if (result === null) return;
 
-        commitAndRender(true);
+        commitAndRender({ prompts: true });
     },
 
     /**
@@ -397,9 +387,11 @@ export const promptService = {
         copyToClipboard(prompt.content).then(() => {
             prompt.usageCount++;
             prompt.lastUsed = Date.now();
+            stateManager.bumpVersion();
 
-            clearPromptCache();
-            stateManager.save();
+            // Re-render so the usage count and "recently used" sort order update
+            // immediately without waiting for the next user action.
+            commitAndRender({ prompts: true });
 
             showToast('Copied to clipboard!', 'success');
         }).catch(() => {
@@ -425,7 +417,7 @@ export const promptService = {
 
         commitAndRender();
         state.ui.selectedPrompts.clear();
-        import('../view/ui.js').then(ui => ui.updateBulkUI());
+        updateBulkUI();
 
         showToast(`${count} prompt${count > 1 ? 's' : ''} deleted`, 'success');
     },
@@ -444,11 +436,11 @@ export const promptService = {
         this.bulkToggleFavorite(idsSnapshot);
 
         historyService.push(
-            () => { const pm = getPromptMap(); previousStates.forEach((fav, id) => { const p = pm.get(id); if (p) { p.favorite = fav; p.updatedAt = Date.now(); } }); commitAndRender(true); },
-            () => { this.bulkToggleFavorite(idsSnapshot); commitAndRender(true); }
+            () => { const pm = getPromptMap(); previousStates.forEach((fav, id) => { const p = pm.get(id); if (p) { p.favorite = fav; p.updatedAt = Date.now(); } }); commitAndRender({ prompts: true }); },
+            () => { this.bulkToggleFavorite(idsSnapshot); commitAndRender({ prompts: true }); }
         );
 
-        commitAndRender(true);
+        commitAndRender({ prompts: true });
         showToast('Favorites updated!', 'success');
     },
 

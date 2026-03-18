@@ -1,7 +1,7 @@
-import { DEFAULT_PREFERENCES } from './config/constants.js';
-import { SAVE_DEBOUNCE_MS } from './config/constants.js';
+import { DEFAULT_PREFERENCES, SAVE_DEBOUNCE_MS } from './config/constants.js';
 import { storageService } from './services/storage-service.js';
 import { clearPromptCache } from './services/prompt-service.js';
+import { buildSearchIndex } from './models/prompt.js';
 import { renderAll } from './view/render.js';
 
 /**
@@ -183,6 +183,11 @@ export const stateManager = {
         clearTimeout(saveTimeout);
 
         const doSave = async () => {
+            // NOTE: state.ui is intentionally excluded from persistence.
+            // It contains purely ephemeral runtime state (open modals, active
+            // toasts, selected prompts, dropdown state, hover tracking) that
+            // must always start fresh on page load and must never be written
+            // to IndexedDB or cross-tab sync messages.
             const data = {
                 prompts: state.prompts,
                 collections: state.collections,
@@ -267,9 +272,14 @@ export const stateManager = {
     updatePrompt(id, updates) {
         const prompt = state.prompts.find(p => p.id === id);
         if (!prompt) return false;
-        
+
         stateVersion++;
         Object.assign(prompt, updates);
+
+        // Keep the cached search index in sync (e.g. after undo/redo restores
+        // title/description/content/tags from a snapshot).
+        prompt._searchIndex = buildSearchIndex(prompt);
+
         return true;
     },
 

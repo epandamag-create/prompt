@@ -45,9 +45,10 @@ export const MODAL_FADE_MS = 200;
 export const PROMPT_TITLE_MAX_LENGTH = 200;
 export const PROMPT_TAGS_MAX_COUNT = 10;
 
-// Pagination constants
-export const PAGINATION_THRESHOLD = 50;  // Enable pagination at 50+ prompts
-export const ITEMS_PER_PAGE = 50;
+// Pagination constants — 24 fits 4 columns × 6 rows in grid view; smaller pages
+// mean fewer DOM nodes per render pass and faster initial paint.
+export const PAGINATION_THRESHOLD = 24;
+export const ITEMS_PER_PAGE = 24;
 
 export const DEFAULT_PREFERENCES = {
     theme: 'dark',
@@ -68,10 +69,11 @@ export const MODALS = {
     CONFIRM: 'confirmModal'
 };
 
-// Modal priorities for getTopModal()
+// Modal priorities for getTopModal() — higher index = lower priority.
+// previewModal is included so Escape closes it correctly.
 export const MODAL_PRIORITY = [
     'confirmModal', 'bulkMoveModal', 'usePromptModal', 'promptModal',
-    'collectionModal', 'categoryModal', 'importModal'
+    'collectionModal', 'categoryModal', 'importModal', 'previewModal'
 ];
 
 // View modes
