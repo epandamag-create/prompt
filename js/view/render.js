@@ -435,6 +435,8 @@ export function renderTags(tagCounts) {
         return;
     }
 
+    const wasExpanded = container.classList.contains('expanded');
+
     const visible = tags.slice(0, TAGS_VISIBLE_COUNT);
     const hidden = tags.slice(TAGS_VISIBLE_COUNT);
 
@@ -445,14 +447,18 @@ export function renderTags(tagCounts) {
         </div>`;
 
     const moreBtn = hidden.length > 0
-        ? `<button class="tag-more-btn" data-action="toggle-tags-more">+${hidden.length} more</button>`
+        ? `<button class="tag-more-btn" data-action="toggle-tags-more"${wasExpanded ? ' data-expanded="true"' : ''}>+${hidden.length} more</button>`
         : '';
 
-    container.className = 'tags-cloud';
+    container.className = `tags-cloud${wasExpanded ? ' expanded' : ''}`;
     container.innerHTML =
         visible.map(t => chipHTML(t)).join('') +
-        hidden.map(t => chipHTML(t, ' tag-chip--hidden')).join('') +
+        hidden.map(t => chipHTML(t, wasExpanded ? '' : ' tag-chip--hidden')).join('') +
         moreBtn;
+    if (wasExpanded) {
+        const btn = container.querySelector('.tag-more-btn');
+        if (btn) btn.textContent = 'Show less';
+    }
 }
 
 // ============================================
