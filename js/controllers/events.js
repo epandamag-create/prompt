@@ -197,6 +197,7 @@ function registerEventHandlers() {
         const hidden = cloud.querySelectorAll('.tag-chip--hidden');
         const expanded = el.dataset.expanded === 'true';
         hidden.forEach(chip => chip.classList.toggle('tag-chip--hidden', expanded));
+        cloud.classList.toggle('expanded', !expanded);
         el.dataset.expanded = expanded ? 'false' : 'true';
         el.textContent = expanded ? `+${hidden.length} more` : 'Show less';
     });

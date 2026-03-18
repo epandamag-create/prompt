@@ -842,6 +842,11 @@
             display: none;
         }
 
+        .tags-cloud.expanded {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
         .tag-more-btn {
             display: inline-flex;
             align-items: center;
