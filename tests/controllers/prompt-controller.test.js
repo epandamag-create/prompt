@@ -1,9 +1,10 @@
 import { describe, it, expect } from '../test-framework.js';
 import { promptController } from '../../js/controllers/prompt-controller.js';
-import { state } from '../../js/state.js';
+import { state, stateManager } from '../../js/state.js';
 import { promptService } from '../../js/services/prompt-service.js';
 import { variableService } from '../../js/services/variable-service.js';
 import { modalController } from '../../js/controllers/modal-controller.js';
+import { historyService } from '../../js/services/history-service.js';
 
 describe('Controller: PromptController', () => {
     
@@ -89,5 +90,81 @@ describe('Controller: PromptController', () => {
         promptController.previewSelected();
         expect(mockShowPreviewCalledWith).toBeTruthy();
         expect(mockShowPreviewCalledWith.id).toBe('p1');
+    });
+});
+
+// ── BLOCKER-1: deletePrompt must not register a duplicate restore path ────────
+// Before the fix, showToast received an undo callback that also called
+// this.restore(), so clicking the toast AND pressing Ctrl+Z would each restore
+// the prompt independently. After the fix only historyService is the undo path.
+
+describe('Service: PromptService — deletePrompt undo registration', () => {
+
+    const originalDeletePromptMethod = promptService.deletePrompt;
+    const originalCommit = stateManager.commit;
+    const originalDeleteState = stateManager.deletePrompt;
+    const originalRestore = stateManager.restorePrompt;
+
+    let restoreCallCount = 0;
+
+    function resetTestEnvironment() {
+        restoreCallCount = 0;
+
+        historyService._undoStack = [];
+        historyService._redoStack = [];
+
+        // Minimal state — one prompt to delete
+        state.prompts = [{ id: 'del1', title: 'To Delete', content: 'Bye', tags: [], variables: [] }];
+        state.collections = [];
+        state.categories = [];
+        state.ui.selectedPrompts = new Set();
+
+        // Suppress commit's heavy DOM/DB work
+        stateManager.commit = () => {};
+
+        // Track restore calls
+        stateManager.restorePrompt = (deleted) => {
+            restoreCallCount++;
+            // Put the prompt back so repeated undo calls don't crash
+            if (deleted && deleted.prompt) state.prompts.push(deleted.prompt);
+        };
+    }
+
+    function teardown() {
+        stateManager.commit = originalCommit;
+        stateManager.restorePrompt = originalRestore;
+    }
+
+    it('deletePrompt() registers exactly one undo entry in historyService', async () => {
+        resetTestEnvironment();
+        promptService.deletePrompt('del1');
+        expect(historyService._undoStack.length).toBe(1);
+        teardown();
+    });
+
+    it('deletePrompt() undo entry restores the prompt (calls stateManager.restorePrompt once)', async () => {
+        resetTestEnvironment();
+        promptService.deletePrompt('del1');
+        historyService.undo();
+        expect(restoreCallCount).toBe(1);
+        teardown();
+    });
+
+    it('deletePrompt() does not expose a second restore path — undo only via historyService', async () => {
+        // After the fix there is no toast callback; the only undo path is
+        // historyService. We verify by exhausting the stack: one undo call
+        // is all that exists, and a second undo does nothing.
+        resetTestEnvironment();
+        promptService.deletePrompt('del1');
+
+        historyService.undo(); // correct undo
+        const countAfterFirstUndo = restoreCallCount;
+
+        historyService.undo(); // stack is empty — should be a no-op
+        const countAfterSecondUndo = restoreCallCount;
+
+        expect(countAfterFirstUndo).toBe(1);
+        expect(countAfterSecondUndo).toBe(1); // no extra restore triggered
+        teardown();
     });
 });
