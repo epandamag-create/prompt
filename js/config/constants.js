@@ -44,6 +44,7 @@ export const MODAL_FADE_MS = 200;
 export const PROMPT_TITLE_MAX_LENGTH = 200;
 // UI tag count limit — keep in sync with VALIDATION_RULES.prompt.tags.maxItems above
 export const PROMPT_TAGS_MAX_COUNT = 10;
+export const RECENT_PROMPTS_LIMIT = 20;
 
 // Pagination constants — 24 fits 4 columns × 6 rows in grid view; smaller pages
 // mean fewer DOM nodes per render pass and faster initial paint.

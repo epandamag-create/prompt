@@ -1,5 +1,5 @@
 import { state, stateManager, stateVersion } from '../state.js';
-import { VIEWS, SORT_OPTIONS } from '../config/constants.js';
+import { VIEWS, SORT_OPTIONS, RECENT_PROMPTS_LIMIT } from '../config/constants.js';
 import { createPromptModel, duplicatePromptModel, buildSearchIndex } from '../models/prompt.js';
 import { extractVariables, copyToClipboard } from '../utils/helpers.js';
 import { closeModal } from '../view/modal.js';
@@ -62,8 +62,8 @@ export function getFilteredPrompts() {
         prompts = prompts
             .filter(p => p.lastUsed)
             .sort((a, b) => b.lastUsed - a.lastUsed)
-            .slice(0, 20);
-} else if (state.currentView === VIEWS.FILTERED) {
+            .slice(0, RECENT_PROMPTS_LIMIT);
+    } else if (state.currentView === VIEWS.FILTERED) {
         prompts = prompts.filter(p => {
             if (state.currentCollections.length > 0 && !state.currentCollections.includes(p.collectionId)) {
                 return false;

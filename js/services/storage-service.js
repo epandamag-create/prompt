@@ -1,5 +1,5 @@
 import { db } from './db.js';
-import { STORAGE_KEY, VARIABLE_VALUES_KEY } from '../config/constants.js';
+import { STORAGE_KEY, VARIABLE_VALUES_KEY, DEFAULT_PREFERENCES } from '../config/constants.js';
 
 // Key for storing main app data in IndexedDB
 const MAIN_KEY = 'main';
@@ -15,13 +15,7 @@ const DEFAULT_DATA = {
     prompts: [],
     collections: [],
     categories: [],
-    preferences: {
-        theme: 'dark',
-        density: 'comfortable',
-        viewMode: 'grid',
-        sidebarCollapsed: false,
-        sortBy: 'newest'
-    },
+    preferences: { ...DEFAULT_PREFERENCES },
     sidebarSections: {
         quickaccess: true,
         categories: true,
