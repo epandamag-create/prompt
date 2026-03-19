@@ -283,11 +283,12 @@ export const promptService = {
      */
     bulkMoveToCollection(ids, collectionId) {
         const promptMap = getPromptMap();
-        
+
         ids.forEach(id => {
             const prompt = promptMap.get(id);
             if (prompt) {
                 prompt.collectionId = collectionId;
+                prompt.updatedAt = Date.now();
             }
         });
     },
@@ -485,6 +486,7 @@ export const promptService = {
             } else {
                 p.tags = [...tags];
             }
+            p.updatedAt = Date.now();
         }
 
         state.prompts.forEach(p => { if (idsSnapshot.has(p.id)) applyTags(p); });
@@ -513,7 +515,10 @@ export const promptService = {
         const promptMap = getPromptMap();
         idsSnapshot.forEach(id => {
             const prompt = promptMap.get(id);
-            if (prompt) prompt.categoryId = categoryId;
+            if (prompt) {
+                prompt.categoryId = categoryId;
+                prompt.updatedAt = Date.now();
+            }
         });
 
         historyService.push(
