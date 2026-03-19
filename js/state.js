@@ -463,6 +463,7 @@ export const stateManager = {
         state.categories = loadedData.categories ?? [];
         state.preferences = { ...state.preferences, ...loadedData.preferences };
         state.sidebarSections = { ...state.sidebarSections, ...loadedData.sidebarSections };
+        stateVersion++; // invalidate memoized Maps in render.js (_mapVersion, _favCountVersion)
         clearPromptCache();
         renderAll();
     }

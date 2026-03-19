@@ -74,6 +74,11 @@ export const importExportService = {
             let skippedCount = 0;
             const skippedTitles = [];
 
+            // Validate import size limit BEFORE mutating state
+            if (validatedData.prompts && validatedData.prompts.length > IMPORT_EXPORT_LIMITS.MAX_PROMPTS_PER_IMPORT) {
+                return { success: false, error: `Import exceeds limit of ${IMPORT_EXPORT_LIMITS.MAX_PROMPTS_PER_IMPORT} prompts. Please split your file.` };
+            }
+
             // Upsert collections and build old-id → new-id map in one pass
             const collectionIdMap = new Map();
             (validatedData.collections || []).forEach(col => {
@@ -98,10 +103,6 @@ export const importExportService = {
 
             // Handle prompts
             if (validatedData.prompts && validatedData.prompts.length > 0) {
-                // Validate import size limit
-                if (validatedData.prompts.length > IMPORT_EXPORT_LIMITS.MAX_PROMPTS_PER_IMPORT) {
-                    return { success: false, error: `Import exceeds limit of ${IMPORT_EXPORT_LIMITS.MAX_PROMPTS_PER_IMPORT} prompts. Please split your file.` };
-                }
                 validatedData.prompts.forEach(p => {
                     if (mode === 'merge') {
                         // Check for duplicates by title
@@ -134,9 +135,8 @@ export const importExportService = {
                 });
             }
 
-            clearPromptCache();
-            stateManager.save();
-            renderAll();
+            stateManager.bumpVersion(); // invalidate memoized maps in render.js
+            stateManager.commit();      // clearPromptCache + save + renderAll
             updateCollectionDropdown();
             updateCategoryDropdown();
 
@@ -191,11 +191,11 @@ export const importExportService = {
                 }
             }
             
-            if (mode === 'replace') {
-                state.prompts = [];
-                state.collections = [];
-                state.categories = [];
-            }
+            // For replace mode: build into local arrays so state is swapped atomically
+            // only after all rows are processed. A mid-loop error won't corrupt live state.
+            let workingPrompts = mode === 'replace' ? [] : state.prompts;
+            let workingCollections = mode === 'replace' ? [] : state.collections;
+            let workingCategories = mode === 'replace' ? [] : state.categories;
 
             let importedCount = 0;
             let skippedCount = 0;
@@ -213,7 +213,7 @@ export const importExportService = {
 
             promptsData.forEach(p => {
                 if (mode === 'merge') {
-                    const exists = state.prompts.find(
+                    const exists = workingPrompts.find(
                         existing => existing.title === p.Title && existing.content === p.Content
                     );
                     if (exists) {
@@ -223,8 +223,8 @@ export const importExportService = {
                     }
                 }
 
-                const collectionId = getOrCreateId(p.Collection, 'collection', state.collections, createCollectionModel);
-                const categoryId = getOrCreateId(p.Category, 'category', state.categories, createCategoryModel);
+                const collectionId = getOrCreateId(p.Collection, 'collection', workingCollections, createCollectionModel);
+                const categoryId = getOrCreateId(p.Category, 'category', workingCategories, createCategoryModel);
 
                 const newPrompt = createPromptModel({
                     title: p.Title,
@@ -235,14 +235,20 @@ export const importExportService = {
                     categoryId,
                     favorite: (p.Favorite || 'false').toLowerCase() === 'true'
                 });
-                
-                state.prompts.unshift(newPrompt);
+
+                workingPrompts.unshift(newPrompt);
                 importedCount++;
             });
-            
-            clearPromptCache();
-            stateManager.save();
-            renderAll();
+
+            // Atomic swap for replace mode: only update live state after full success
+            if (mode === 'replace') {
+                state.prompts = workingPrompts;
+                state.collections = workingCollections;
+                state.categories = workingCategories;
+            }
+
+            stateManager.bumpVersion(); // invalidate memoized maps in render.js
+            stateManager.commit();      // clearPromptCache + save + renderAll
             updateCollectionDropdown();
             updateCategoryDropdown();
             

@@ -20,6 +20,7 @@ export const filterService = {
      */
     clearSearch() {
         state.searchQuery = '';
+        this.applyFilters();
     },
 
     /**

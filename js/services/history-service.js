@@ -30,6 +30,7 @@ export const historyService = {
             entry.undo();
         } catch (e) {
             console.error('[historyService] undo failed:', e);
+            this._undoStack.push(entry); // restore entry so it isn't silently lost
             return;
         }
         this._redoStack.push(entry);
@@ -45,6 +46,7 @@ export const historyService = {
             entry.redo();
         } catch (e) {
             console.error('[historyService] redo failed:', e);
+            this._redoStack.push(entry); // restore entry so it isn't silently lost
             return;
         }
         this._undoStack.push(entry);

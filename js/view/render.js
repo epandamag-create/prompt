@@ -8,6 +8,13 @@ import { PAGINATION_THRESHOLD, ITEMS_PER_PAGE, VIEWS } from '../config/constants
 
 const MAX_PREVIEW_CHARS = 500;
 
+// Whitelist hex colors to prevent CSS injection via user-supplied category/collection colors.
+// Accepts only 6-digit hex values; falls back to the provided default otherwise.
+const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
+function safeColor(color, fallback) {
+    return HEX_COLOR_RE.test(color) ? color : fallback;
+}
+
 // Pagination state (not moved to constants as it's runtime state)
 let paginationState = {
     currentPage: 1,
@@ -270,8 +277,8 @@ function generatePromptCardHTML(prompt, categoryMap, collectionMap) {
         <div class="prompt-card-header">
             <div class="prompt-title" data-action="edit" title="Click to edit">${escapeHtml(prompt.title)}</div>
             <div class="prompt-badges">
-                ${category ? `<span class="prompt-category-badge" style="background: ${category.color};" data-action="filter-category" data-id="${sanitizeId(category.id)}">${escapeHtml(category.name)}</span>` : ''}
-                ${collection ? `<span class="prompt-collection-badge" style="border-color: ${collection.color}; color: ${collection.color};" data-action="filter-collection" data-id="${sanitizeId(collection.id)}" title="Collection: ${escapeHtml(collection.name)}">📁 ${escapeHtml(collection.name)}</span>` : ''}
+                ${category ? `<span class="prompt-category-badge" style="background: ${safeColor(category.color, '#8b5cf6')};" data-action="filter-category" data-id="${sanitizeId(category.id)}">${escapeHtml(category.name)}</span>` : ''}
+                ${collection ? `<span class="prompt-collection-badge" style="border-color: ${safeColor(collection.color, '#3b82f6')}; color: ${safeColor(collection.color, '#3b82f6')};" data-action="filter-collection" data-id="${sanitizeId(collection.id)}" title="Collection: ${escapeHtml(collection.name)}">📁 ${escapeHtml(collection.name)}</span>` : ''}
             </div>
             <button class="prompt-favorite ${prompt.favorite ? 'active' : ''}" data-action="toggle-favorite" title="${prompt.favorite ? 'Remove from favorites' : 'Add to favorites'}" aria-label="${prompt.favorite ? 'Remove from favorites' : 'Add to favorites'}" aria-pressed="${prompt.favorite}">
                 <svg fill="${prompt.favorite ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24">
@@ -364,11 +371,12 @@ function renderEmptyState(grid) {
 
 export function renderCollections(promptCounts) {
     const container = document.getElementById('collectionsList');
-    if (!promptCounts || state.collections.length === 0) { container.innerHTML = ''; return; }
+    if (state.collections.length === 0) { container.innerHTML = ''; return; }
+    if (!promptCounts) return; // counts not available; leave existing DOM intact
 
     container.innerHTML = state.collections.map(collection => {
         const count = promptCounts[collection.id] || 0;
-        const color = collection.color || '#3b82f6';
+        const color = safeColor(collection.color, '#3b82f6');
         const safeId = sanitizeId(collection.id);
         return `
             <div class="collection-item" draggable="true" data-action="set-collection-view" data-id="${safeId}" data-original-id="${escapeHtml(collection.id)}" role="treeitem" aria-label="${escapeHtml(collection.name)}, ${count} prompts" title="${escapeHtml(collection.name)}">
@@ -394,11 +402,12 @@ export function renderCollections(promptCounts) {
 
 export function renderCategories(categoryCounts) {
     const container = document.getElementById('categoriesList');
-    if (!categoryCounts || state.categories.length === 0) { container.innerHTML = ''; return; }
+    if (state.categories.length === 0) { container.innerHTML = ''; return; }
+    if (!categoryCounts) return; // counts not available; leave existing DOM intact
 
     container.innerHTML = state.categories.map(cat => {
         const count = categoryCounts[cat.id] || 0;
-        const color = cat.color || '#8b5cf6';
+        const color = safeColor(cat.color, '#8b5cf6');
         const safeId = sanitizeId(cat.id);
         return `
             <div class="category-item" draggable="true" data-action="set-category-view" data-id="${safeId}" data-original-id="${escapeHtml(cat.id)}" role="treeitem" aria-label="${escapeHtml(cat.name)}, ${count} prompts" title="${escapeHtml(cat.name)}">
@@ -474,11 +483,17 @@ export function renderFilterBar() {
 
     state.currentCategories.forEach(id => {
         const cat = catMap.get(id);
-        if (cat) chips.push(`<span class="filter-chip" style="background: ${cat.color}22; color: ${cat.color};"><span>${escapeHtml(cat.name)}</span><span class="filter-chip-remove" data-action="set-category-view" data-id="${sanitizeId(id)}">&times;</span></span>`);
+        if (cat) {
+            const c = safeColor(cat.color, '#8b5cf6');
+            chips.push(`<span class="filter-chip" style="background: ${c}22; color: ${c};"><span>${escapeHtml(cat.name)}</span><span class="filter-chip-remove" data-action="set-category-view" data-id="${sanitizeId(id)}">&times;</span></span>`);
+        }
     });
     state.currentCollections.forEach(id => {
         const col = colMap.get(id);
-        if (col) chips.push(`<span class="filter-chip" style="background: ${col.color}22; color: ${col.color};"><span>${escapeHtml(col.name)}</span><span class="filter-chip-remove" data-action="set-collection-view" data-id="${sanitizeId(id)}">&times;</span></span>`);
+        if (col) {
+            const c = safeColor(col.color, '#3b82f6');
+            chips.push(`<span class="filter-chip" style="background: ${c}22; color: ${c};"><span>${escapeHtml(col.name)}</span><span class="filter-chip-remove" data-action="set-collection-view" data-id="${sanitizeId(id)}">&times;</span></span>`);
+        }
     });
     state.currentTags.forEach(tag => {
         chips.push(`<span class="filter-chip"><span>#${escapeHtml(tag)}</span><span class="filter-chip-remove" data-action="set-tag-view" data-tag="${escapeHtml(tag)}">&times;</span></span>`);

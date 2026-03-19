@@ -346,11 +346,7 @@ export const promptService = {
 
         commitAndRender();
 
-        showToast('Prompt deleted', 'success', () => {
-            this.restore(deleted);
-            commitAndRender();
-            showToast('Prompt restored!', 'success');
-        });
+        showToast('Prompt deleted', 'success');
     },
 
     /**
@@ -465,26 +461,6 @@ export const promptService = {
 
         commitAndRender();
         showToast('Prompts moved to collection!', 'success');
-    },
-
-    /**
-     * Bulk change category with UI update - O(n) using Map
-     * @param {Set} ids - Set of prompt IDs
-     * @param {string|null} categoryId - Category ID
-     */
-    bulkChangeCategory(ids, categoryId) {
-        const promptMap = getPromptMap();
-
-        ids.forEach(id => {
-            const prompt = promptMap.get(id);
-            if (prompt) {
-                prompt.categoryId = categoryId;
-            }
-        });
-
-        commitAndRender();
-
-        showToast('Category updated!', 'success');
     },
 
     /**
