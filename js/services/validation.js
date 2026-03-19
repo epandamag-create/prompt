@@ -155,8 +155,13 @@ export function validateAndSanitizeData(data) {
                 lastUsed: p.lastUsed ?? null,
                 createdAt: typeof p.createdAt === 'number' ? p.createdAt : Date.now(),
                 updatedAt: typeof p.updatedAt === 'number' ? p.updatedAt : Date.now(),
-                _searchIndex: buildSearchIndex({title: p.title, description: p.description ?? '', content: p.content, tags: p.tags ?? []})
             };
+            Object.defineProperty(prompt, '_searchIndex', {
+                value: buildSearchIndex({ title: p.title, description: p.description ?? '', content: p.content, tags: p.tags ?? [] }),
+                enumerable: false,
+                writable: true,
+                configurable: true,
+            });
             return prompt;
         })
         .filter(Boolean);
