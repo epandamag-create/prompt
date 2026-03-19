@@ -400,13 +400,6 @@ export const stateManager = {
     },
 
     /**
-     * Increment the state version counter (for cache invalidation)
-     */
-    bumpVersion() {
-        stateVersion++;
-    },
-
-    /**
      * Delete a category from state
      * @param {string} id - Category ID
      * @returns {Array} IDs of affected prompts
@@ -426,6 +419,13 @@ export const stateManager = {
         state.currentCategories = state.currentCategories.filter(cid => cid !== id);
         
         return affectedPrompts;
+    },
+
+    /**
+     * Increment the state version counter (for cache invalidation)
+     */
+    bumpVersion() {
+        stateVersion++;
     },
 
     /**
