@@ -24,6 +24,16 @@ describe('Controller: IOController', () => {
     const originalExportToFile = importExportService.exportToFile;
     const originalExportToCsv = importExportService.exportToCsv;
     const originalCommit = stateManager.commit;
+    const originalSave = stateManager.save;
+
+    function teardown() {
+        importExportService.importFromFile = originalImportFromFile;
+        importExportService.importFromCsv = originalImportFromCsv;
+        importExportService.exportToFile = originalExportToFile;
+        importExportService.exportToCsv = originalExportToCsv;
+        stateManager.commit = originalCommit;
+        stateManager.save = originalSave;
+    }
 
     function resetTestEnvironment() {
         // 1. Reset DOM
@@ -110,6 +120,7 @@ describe('Controller: IOController', () => {
 
         expect(mockImportFromFileCalledWith).toBeTruthy();
         expect(saveCalled).toBe(true);
+        teardown();
     });
 
     it('importPrompts should show error for invalid file type', async () => {
@@ -127,6 +138,7 @@ describe('Controller: IOController', () => {
         expect(saveCalled).toBe(false);
         const toast = document.querySelector('.toast.error');
         expect(toast).toBeTruthy();
+        teardown();
     });
 
     it('exportPrompts should call exportToFile for JSON format', async () => {
@@ -135,18 +147,21 @@ describe('Controller: IOController', () => {
         expect(mockExportToFileCalledWith).toBeTruthy();
         expect(mockExportToFileCalledWith.prompts.length).toBe(1);
         expect(mockExportToFileCalledWith.filename).toContain('.json');
+        teardown();
     });
 
     it('showImportModal should call openModal', async () => {
         resetTestEnvironment();
         ioController.showImportModal();
         expect(state.ui.openModals.has('importModal')).toBe(true);
+        teardown();
     });
 
     it('showExportModal should call openModal', async () => {
         resetTestEnvironment();
         ioController.showExportModal();
         expect(state.ui.openModals.has('exportModal')).toBe(true);
+        teardown();
     });
 
 });
