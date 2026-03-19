@@ -33,8 +33,10 @@ import { generateId, extractVariables } from '../utils/helpers.js';
  * @returns {string} Lowercase search index
  */
 export function buildSearchIndex(prompt) {
+    // Use \x00 as field separator to prevent cross-field false positives.
+    // A query cannot contain \x00 from keyboard input, so no false negatives.
     return [prompt.title, prompt.description, prompt.content, ...prompt.tags]
-        .join(' ').toLowerCase();
+        .join('\x00').toLowerCase();
 }
 
 /**
