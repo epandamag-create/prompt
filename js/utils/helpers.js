@@ -105,7 +105,7 @@ export function highlightMarkdown(text) {
             return match;
         })
         // 3. Headings + List items (combined)
-        .replace(/^(# .*$)|^(\* |\-| \d+\. )/gm, (match, heading, list) => {
+        .replace(/^(# .*$)|^(\* |\-|\d+\. )/gm, (match, heading, list) => {
             if (heading !== undefined) return `<span class="md-heading">${heading}</span>`;
             if (list !== undefined) return `<span class="md-list">${match}</span>`;
             return match;
@@ -147,13 +147,11 @@ export function formatDate(timestamp) {
     const now = new Date();
     const diff = now - date;
     
-    if (diff < 0) return 'Just now';
-    
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
-    
-    if (minutes < 1) return 'Just now';
+
+    if (diff < 60000) return 'Just now';
     if (minutes < 60) return `${minutes}m ago`;
     if (hours < 24) return `${hours}h ago`;
     if (days < 7) return `${days}d ago`;
