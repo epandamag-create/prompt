@@ -36,8 +36,9 @@ export function validateAndSanitizeData(data) {
             const newId = sanitizeId(c.id) || generateId();
             if (oldId && oldId !== newId) {
                 collectionIdMap.set(oldId, newId);
+                errors.push(`Collection #${i+1}: ID "${oldId}" contained invalid characters and was sanitized to "${newId}".`);
             }
-            
+
             // Validate name using validation rules
             const nameValidation = validateField(c.name, VALIDATION_RULES.collection.name, 'Collection name');
             if (!nameValidation.valid) {
@@ -73,6 +74,7 @@ export function validateAndSanitizeData(data) {
             const newId = sanitizeId(cat.id) || generateId();
             if (oldId && oldId !== newId) {
                 categoryIdMap.set(oldId, newId);
+                errors.push(`Category #${i+1}: ID "${oldId}" contained invalid characters and was sanitized to "${newId}".`);
             }
 
             // Validate name using validation rules
