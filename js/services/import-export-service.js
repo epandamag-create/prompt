@@ -201,7 +201,7 @@ export const importExportService = {
             let skippedCount = 0;
             const skippedTitlesCsv = [];
 
-            const getOrCreateId = (name, type, items, createModel) => {
+            const getOrCreateId = (name, items, createModel) => {
                 if (!name) return null;
                 let item = items.find(i => i.name.toLowerCase() === name.toLowerCase());
                 if (!item) {
@@ -223,8 +223,8 @@ export const importExportService = {
                     }
                 }
 
-                const collectionId = getOrCreateId(p.Collection, 'collection', workingCollections, createCollectionModel);
-                const categoryId = getOrCreateId(p.Category, 'category', workingCategories, createCategoryModel);
+                const collectionId = getOrCreateId(p.Collection, workingCollections, createCollectionModel);
+                const categoryId = getOrCreateId(p.Category, workingCategories, createCategoryModel);
 
                 const newPrompt = createPromptModel({
                     title: p.Title,

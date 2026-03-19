@@ -144,9 +144,9 @@ export const filterService = {
      * @returns {boolean}
      */
     hasActiveFilters() {
-        return state.searchQuery || 
-               state.currentCollections.length > 0 || 
-               state.currentCategories.length > 0 || 
+        return !!state.searchQuery ||
+               state.currentCollections.length > 0 ||
+               state.currentCategories.length > 0 ||
                state.currentTags.length > 0;
     },
 

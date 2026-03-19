@@ -1,5 +1,5 @@
 import { db } from './db.js';
-import { VARIABLE_VALUES_KEY } from '../config/constants.js';
+import { STORAGE_KEY, VARIABLE_VALUES_KEY } from '../config/constants.js';
 
 // Key for storing main app data in IndexedDB
 const MAIN_KEY = 'main';
@@ -89,7 +89,7 @@ export const storageService = {
         if (existing) return false; // Already migrated
 
         try {
-            const stored = localStorage.getItem('promptOrganizerData');
+            const stored = localStorage.getItem(STORAGE_KEY);
             if (!stored) return false;
 
             const parsed = JSON.parse(stored);
@@ -102,7 +102,7 @@ export const storageService = {
                 localStorage.removeItem(VARIABLE_VALUES_KEY);
             }
 
-            localStorage.removeItem('promptOrganizerData');
+            localStorage.removeItem(STORAGE_KEY);
             console.log('[storage] Migrated from localStorage to IndexedDB');
             return true;
         } catch (error) {

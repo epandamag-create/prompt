@@ -206,7 +206,7 @@ export const stateManager = {
         };
 
         if (immediate) {
-            doSave();
+            return doSave(); // return Promise so callers can await
         } else {
             saveTimeout = setTimeout(doSave, SAVE_DEBOUNCE_MS);
         }

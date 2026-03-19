@@ -1,4 +1,4 @@
-import { sanitizeId, generateId, extractVariables, validateField, isValidId } from '../utils/helpers.js';
+import { sanitizeId, generateId, extractVariables, validateField } from '../utils/helpers.js';
 import { buildSearchIndex } from '../models/prompt.js';
 import { COLORS, VALIDATION_RULES } from '../config/constants.js';
 

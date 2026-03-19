@@ -14,7 +14,7 @@ export const VALIDATION_RULES = {
         title: { minLength: 1, maxLength: 200 },
         content: { minLength: 1, maxLength: 50000 },
         description: { maxLength: 1000 },
-        tags: { maxItems: 50, maxItemLength: 50 },
+        tags: { maxItems: 10, maxItemLength: 50 }, // keep in sync with PROMPT_TAGS_MAX_COUNT
     },
 };
 
@@ -22,7 +22,6 @@ export const VALIDATION_RULES = {
 export const IMPORT_EXPORT_LIMITS = {
     MAX_PROMPTS_PER_IMPORT: 5000,
     MAX_TITLE_LENGTH: 200,
-    MAX_DESCRIPTION_LENGTH: 500,
     MAX_COLLECTION_NAME_LENGTH: 50,
     MAX_CATEGORY_NAME_LENGTH: 50,
 };
@@ -43,6 +42,7 @@ export const MODAL_FADE_MS = 200;
 
 // Form validation limits (used in UI hints)
 export const PROMPT_TITLE_MAX_LENGTH = 200;
+// UI tag count limit — keep in sync with VALIDATION_RULES.prompt.tags.maxItems above
 export const PROMPT_TAGS_MAX_COUNT = 10;
 
 // Pagination constants — 24 fits 4 columns × 6 rows in grid view; smaller pages
