@@ -5,37 +5,57 @@ import { IMPORT_EXPORT_LIMITS } from '../../js/config/constants.js';
 
 describe('Service: ImportExportService', () => {
 
-    // Minimal DOM that updateCollectionDropdown / updateCategoryDropdown need
+    // Full DOM fixture — renderAll (called by real stateManager.commit) needs these
     const container = document.createElement('div');
     document.body.appendChild(container);
 
     let bumpVersionCalled = false;
-    let commitCalled = false;
+    let saveCalled = false;
 
     const originalBumpVersion = stateManager.bumpVersion;
-    const originalCommit = stateManager.commit;
+    const originalSave = stateManager.save;
 
     function resetTestEnvironment() {
         bumpVersionCalled = false;
-        commitCalled = false;
+        saveCalled = false;
 
-        // Intercept version bump to verify it's called, but still run the real logic
+        // Wrap bumpVersion: track the call AND still run the real logic so
+        // stateVersion increments (needed by renderAll's cache key).
         stateManager.bumpVersion = () => {
             bumpVersionCalled = true;
             originalBumpVersion.call(stateManager);
         };
-        // Skip heavy DOM/DB work (renderAll, save) in commit
-        stateManager.commit = () => { commitCalled = true; };
+
+        // Wrap save: track the call AND suppress the real IndexedDB write.
+        // stateManager.commit (NOT mocked here) calls clearPromptCache + save + renderAll.
+        // Keeping commit as-is means io-controller tests can set their own commit mock
+        // without us clobbering it — this was the root cause of the previous test failure.
+        stateManager.save = () => { saveCalled = true; };
 
         state.prompts = [];
         state.collections = [];
         state.categories = [];
 
-        // Minimal DOM for dropdown updaters
+        // Full DOM for renderAll (renderPrompts, renderCollections, renderCategories,
+        // renderTags, renderFilterBar, updateStats, updateContentTitle)
         container.innerHTML = `
+            <div id="promptGrid"></div>
+            <span id="statsDisplay"></span>
+            <span id="allCount"></span>
+            <span id="favCount"></span>
+            <div id="collectionsList"></div>
+            <div id="categoriesList"></div>
+            <div id="tagsList"></div>
+            <h1 id="contentTitle"></h1>
+            <div id="filterBar"></div>
             <select id="promptCollection"></select>
             <select id="promptCategory"></select>
         `;
+    }
+
+    function teardown() {
+        stateManager.bumpVersion = originalBumpVersion;
+        stateManager.save = originalSave;
     }
 
     // ── BLOCKER-4a: size check must occur BEFORE any state mutation ───────────
@@ -44,7 +64,7 @@ describe('Service: ImportExportService', () => {
         resetTestEnvironment();
 
         const oversizedData = {
-            // One collection that WOULD be upserted if the order were wrong
+            // One collection that WOULD be upserted if the check ran after the upsert
             collections: [{ id: 'c1', name: 'Should Not Appear', color: '#3b82f6' }],
             categories: [],
             prompts: Array.from(
@@ -57,23 +77,24 @@ describe('Service: ImportExportService', () => {
         const result = await importExportService.importFromFile(file, 'merge');
 
         expect(result.success).toBe(false);
-        // If size check runs AFTER upsert the collection would be in state
-        expect(state.collections.length).toBe(0);
+        expect(state.collections.length).toBe(0); // state NOT mutated before the check
+        teardown();
     });
 
-    // ── BLOCKER-4b: stateManager.bumpVersion + commit called after import ─────
+    // ── BLOCKER-4b: stateManager.bumpVersion must be called after import ──────
+    // We verify bumpVersion directly (its call increments stateVersion).
+    // We verify commit indirectly via saveCalled (commit → save).
 
-    it('importFromFile() calls bumpVersion and commit after a successful JSON import', async () => {
+    it('importFromFile() calls bumpVersion and save after a successful JSON import', async () => {
         resetTestEnvironment();
 
-        const data = {
-            prompts: [{ title: 'Hello', content: 'World' }]
-        };
+        const data = { prompts: [{ title: 'Hello', content: 'World' }] };
         const file = new File([JSON.stringify(data)], 'ok.json', { type: 'application/json' });
         await importExportService.importFromFile(file, 'merge');
 
         expect(bumpVersionCalled).toBe(true);
-        expect(commitCalled).toBe(true);
+        expect(saveCalled).toBe(true);
+        teardown();
     });
 
     it('importFromFile() adds prompts to state on successful merge', async () => {
@@ -91,6 +112,7 @@ describe('Service: ImportExportService', () => {
         expect(result.success).toBe(true);
         expect(result.imported).toBe(2);
         expect(state.prompts.length).toBe(2);
+        teardown();
     });
 
     it('importFromFile() skips exact duplicates in merge mode', async () => {
@@ -104,11 +126,12 @@ describe('Service: ImportExportService', () => {
         expect(result.success).toBe(true);
         expect(result.imported).toBe(0);
         expect(result.skipped).toBe(1);
+        teardown();
     });
 
-    // ── BLOCKER-4b (CSV): bumpVersion + commit ────────────────────────────────
+    // ── BLOCKER-4b (CSV): bumpVersion + save ─────────────────────────────────
 
-    it('importFromCsv() calls bumpVersion and commit after a successful CSV import', async () => {
+    it('importFromCsv() calls bumpVersion and save after a successful CSV import', async () => {
         resetTestEnvironment();
 
         const csv = 'Title,Content\nMy Prompt,Hello world';
@@ -116,7 +139,8 @@ describe('Service: ImportExportService', () => {
         await importExportService.importFromCsv(file, 'merge');
 
         expect(bumpVersionCalled).toBe(true);
-        expect(commitCalled).toBe(true);
+        expect(saveCalled).toBe(true);
+        teardown();
     });
 
     // ── BLOCKER-4c: CSV replace mode must be atomic ───────────────────────────
@@ -131,6 +155,7 @@ describe('Service: ImportExportService', () => {
 
         expect(state.prompts.length).toBe(1);
         expect(state.prompts[0].title).toBe('New Prompt');
+        teardown();
     });
 
     it('importFromCsv() replace mode creates collections from CSV data', async () => {
@@ -142,6 +167,7 @@ describe('Service: ImportExportService', () => {
 
         expect(state.collections.length).toBe(1);
         expect(state.collections[0].name).toBe('My Collection');
+        teardown();
     });
 
     it('importFromCsv() merge mode skips exact duplicates', async () => {
@@ -155,6 +181,7 @@ describe('Service: ImportExportService', () => {
         expect(result.success).toBe(true);
         expect(result.imported).toBe(1);
         expect(result.skipped).toBe(1);
+        teardown();
     });
 
     it('importFromCsv() returns error for CSV missing required Title header', async () => {
@@ -165,5 +192,6 @@ describe('Service: ImportExportService', () => {
         const result = await importExportService.importFromCsv(file, 'merge');
 
         expect(result.success).toBe(false);
+        teardown();
     });
 });
