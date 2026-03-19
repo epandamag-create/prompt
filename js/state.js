@@ -256,7 +256,7 @@ export const stateManager = {
      */
     addPrompt(prompt, index = 0) {
         stateVersion++;
-        if (index === 0 || index === undefined) {
+        if (index === 0) {
             state.prompts.unshift(prompt);
         } else {
             state.prompts.splice(index, 0, prompt);
