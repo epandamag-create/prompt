@@ -44,18 +44,23 @@ class HotkeyManager {
 
         // Find matching hotkey
         const match = this.registry.find(h => {
-            // Check key
-            const keyMatch = h.key.toLowerCase() === e.key.toLowerCase();
+            // Check key — also handle non-Latin keyboard layouts via e.code
+            // (e.g. Russian layout: Ctrl+Z gives e.key='я' in Firefox, but e.code='KeyZ')
+            const keyMatchByKey = h.key.toLowerCase() === e.key.toLowerCase();
+            const expectedCode = h.key.length === 1
+                ? 'key' + h.key.toLowerCase()
+                : h.key.toLowerCase();
+            const keyMatchByCode = e.code && e.code.toLowerCase() === expectedCode;
+            const keyMatch = keyMatchByKey || keyMatchByCode;
             if (!keyMatch) return false;
 
             // Check modifiers
             const ctrlMatch = h.ctrl ? (e.ctrlKey || e.metaKey) : true;
             if (!ctrlMatch) return false;
-            
-            // If hotkey requires Ctrl, but it wasn't pressed (handled by ctrlMatch check above)
-            // If hotkey DOES NOT require Ctrl, but Ctrl IS pressed, we generally want to skip 
-            // unless it's a special case, but simple logic is usually sufficient.
-            // Stricter check: if (!!h.ctrl !== (e.ctrlKey || e.metaKey)) return false;
+
+            // Check shift modifier (strict when explicitly defined)
+            if (h.shift === true && !e.shiftKey) return false;
+            if (h.shift === false && e.shiftKey) return false;
 
             // Context check
             if (h.context === 'always') {
@@ -98,6 +103,7 @@ class HotkeyManager {
         const formatKey = (hotkey) => {
             let parts = [];
             if (hotkey.ctrl) parts.push('Ctrl');
+            if (hotkey.shift) parts.push('Shift');
             parts.push(hotkey.key.toUpperCase());
             return parts.join(' + ');
         };

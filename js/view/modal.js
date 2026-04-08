@@ -9,28 +9,38 @@ import { escapeHtml } from '../utils/helpers.js';
 let previouslyFocusedElement = null;
 let currentFocusIndex = 0;
 let focusableElements = [];
+let _focusTimeoutId = null;
 
 export function openModal(modalId) {
     // Save previously focused element for accessibility
     previouslyFocusedElement = document.activeElement;
-    
+
     state.ui.openModals.add(modalId);
     const modal = document.getElementById(modalId);
     modal.classList.add('visible');
-    
+
     // Get all focusable elements
     const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
     focusableElements = Array.from(modal.querySelectorAll(focusableSelector));
     currentFocusIndex = 0;
-    
-    // Focus first focusable element in modal
-    setTimeout(() => {
-        if (focusableElements.length > 0) {
-            focusableElements[0].focus();
+
+    // Cancel any pending focus from a previous modal open
+    if (_focusTimeoutId !== null) {
+        clearTimeout(_focusTimeoutId);
+    }
+
+    // Focus first focusable element — capture local ref so a subsequent openModal
+    // doesn't focus the wrong modal if this timeout fires late
+    const capturedFocusables = focusableElements;
+    _focusTimeoutId = setTimeout(() => {
+        _focusTimeoutId = null;
+        if (capturedFocusables.length > 0) {
+            capturedFocusables[0].focus();
         }
     }, 100);
-    
-    // Add keydown listener for focus trap
+
+    // Add keydown listener for focus trap (only if not already added)
+    modal.removeEventListener('keydown', handleModalKeydown);
     modal.addEventListener('keydown', handleModalKeydown);
 }
 
@@ -53,19 +63,25 @@ function handleModalKeydown(e) {
 export function closeModal(modalId) {
     const modal = document.getElementById(modalId);
     if (!modal) return;
-    
-    // Remove keydown listener to prevent memory leaks
+
+    // Cancel pending focus-on-open timeout so it doesn't steal focus after close
+    if (_focusTimeoutId !== null) {
+        clearTimeout(_focusTimeoutId);
+        _focusTimeoutId = null;
+    }
+
+    // Remove keydown listener to prevent accumulation
     modal.removeEventListener('keydown', handleModalKeydown);
-    
+
     state.ui.openModals.delete(modalId);
     modal.classList.remove('visible');
-    
-    // Restore focus to previously focused element
+
+    // Restore focus to the element that was active before the modal opened
     if (previouslyFocusedElement && previouslyFocusedElement.focus) {
         previouslyFocusedElement.focus();
         previouslyFocusedElement = null;
     }
-    
+
     // Reset focus trap state
     focusableElements = [];
     currentFocusIndex = 0;

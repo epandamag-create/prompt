@@ -15,7 +15,9 @@ import { promptController } from './prompt-controller.js';
 import { taxonomyController } from './taxonomy-controller.js';
 import { toolbarController } from './toolbar-controller.js';
 import { filterController } from './filter-controller.js';
+import { variableService } from '../services/variable-service.js';
 import { toggleDropdown, closeDropdown } from '../view/ui.js';
+import { historyService } from '../services/history-service.js';
 
 // ============================================
 // EVENT ROUTER REGISTRATION
@@ -132,6 +134,16 @@ function registerEventHandlers() {
         bulkController.hideMoveToCollectionModal(e);
     });
 
+    eventRouter.register('hide-bulk-move-category-modal', (el, e) => {
+        if (el.classList.contains('modal-overlay') && e.target !== el) return;
+        bulkController.hideMoveToCategoryModal(e);
+    });
+
+    eventRouter.register('hide-bulk-edit-tags-modal', (el, e) => {
+        if (el.classList.contains('modal-overlay') && e.target !== el) return;
+        bulkController.hideEditTagsModal(e);
+    });
+
     eventRouter.register('hide-confirm-modal', () => modalController.hideConfirm());
 
     // Forms
@@ -140,17 +152,18 @@ function registerEventHandlers() {
     });
 
     eventRouter.register('copy-final-prompt', () => variableService.copyFinalPrompt());
-    eventRouter.register('copy-final-prompt', () => promptController.copyFinalPrompt());
     eventRouter.register('clear-variable-values', () => promptController.clearVariableValues());
     
     eventRouter.register('import-prompts', () => ioController.importPrompts());
     eventRouter.register('toggle-export-menu', () => ioController.showExportModal());
+    eventRouter.register('export-current-view', () => ioController.showExportModal('filtered'));
     eventRouter.register('hide-export-modal', (el, e) => {
         if (el.classList.contains('modal-overlay') && e.target !== el) return;
         ioController.hideExportModal();
     });
     eventRouter.register('execute-export', () => ioController.exportPrompts());
     eventRouter.register('execute-bulk-move', () => bulkController.executeMove());
+    eventRouter.register('execute-bulk-move-category', () => bulkController.executeMoveToCategory());
 
     // Sidebar & Views
     eventRouter.register('toggle-sidebar', () => sidebarController.toggleSidebar());
@@ -176,6 +189,17 @@ function registerEventHandlers() {
 
     eventRouter.register('set-tag-view', (el, e, data) => {
         filterController.toggleTag(data.tag);
+    });
+
+    eventRouter.register('toggle-tags-more', (el) => {
+        const cloud = el.closest('.tags-cloud');
+        if (!cloud) return;
+        const hidden = cloud.querySelectorAll('.tag-chip--hidden');
+        const expanded = el.dataset.expanded === 'true';
+        hidden.forEach(chip => chip.classList.toggle('tag-chip--hidden', expanded));
+        cloud.classList.toggle('expanded', !expanded);
+        el.dataset.expanded = expanded ? 'false' : 'true';
+        el.textContent = expanded ? `+${hidden.length} more` : 'Show less';
     });
 
     // Tag click in prompt card
@@ -218,6 +242,19 @@ function registerEventHandlers() {
     eventRouter.register('bulk-delete', () => bulkController.deleteSelected());
     eventRouter.register('bulk-toggle-favorite', () => bulkController.toggleFavorite());
     eventRouter.register('bulk-move-to-collection', () => bulkController.showMoveToCollectionModal());
+    eventRouter.register('bulk-move-to-category', () => bulkController.showMoveToCategoryModal());
+    eventRouter.register('bulk-edit-tags', () => bulkController.showEditTagsModal());
+    eventRouter.register('bulk-tags-set-mode', (el) => bulkController.setTagsMode(el.dataset.mode));
+    eventRouter.register('bulk-tags-click-badge', (el) => {
+        const input = document.getElementById('bulkTagsInput');
+        if (!input) return;
+        const tag = el.dataset.tag;
+        const existing = input.value.split(',').map(t => t.trim()).filter(Boolean);
+        if (!existing.includes(tag)) {
+            input.value = existing.length ? existing.join(', ') + ', ' + tag : tag;
+        }
+    });
+    eventRouter.register('execute-bulk-edit-tags', () => bulkController.executeEditTags());
 
     // Tag Suggestions
     eventRouter.register('select-tag-suggestion', (el, e, data) => {
@@ -253,6 +290,8 @@ export function setupEventListeners() {
 // HOTKEYS
 // ============================================
 const APP_HOTKEYS = [
+    { key: 'z', ctrl: true, shift: false, context: 'global', description: 'Undo', handler: () => historyService.undo() },
+    { key: 'z', ctrl: true, shift: true, context: 'global', description: 'Redo', handler: () => historyService.redo() },
     { key: 'Escape', context: 'always', description: 'Close modal', handler: () => modalController.closeTopModal() },
     { key: 's', ctrl: true, context: 'modal', description: 'Save (in modal)', handler: () => modalController.saveCurrentModal() },
     { key: 'b', ctrl: true, context: 'global', description: 'New Prompt', handler: () => modalController.openWithConfig('promptModal', 'add') },
@@ -262,15 +301,31 @@ const APP_HOTKEYS = [
     { key: '\\', context: 'global', description: 'Toggle Sidebar', handler: () => document.getElementById('sidebarToggleBtn').click() },
     // New hotkeys
     { key: 'd', ctrl: true, context: 'global', description: 'Duplicate selected', handler: () => promptController.cloneSelected() },
-    { key: 'Delete', context: 'global', description: 'Delete selected', handler: () => bulkController.deleteSelected() },
     { key: 'p', ctrl: true, context: 'global', description: 'Preview selected', handler: () => promptController.previewSelected() },
+    // Card hotkeys (fire when a card is hovered)
+    { key: 'e', context: 'global', description: 'Edit hovered card', handler: () => {
+        const id = state.ui.hoveredCardId;
+        if (id) { state.editingPromptId = id; modalController.openWithConfig('promptModal', 'edit', state.prompts.find(p => p.id === id)); }
+    }},
+    { key: 'c', context: 'global', description: 'Copy hovered card', handler: () => {
+        const id = state.ui.hoveredCardId;
+        if (id) promptController.copy(id);
+    }},
+    { key: 'f', context: 'global', description: 'Toggle favorite hovered card', handler: () => {
+        const id = state.ui.hoveredCardId;
+        if (id) promptController.toggleFavorite(id);
+    }},
+    { key: 'Delete', context: 'global', description: 'Delete hovered/selected', handler: () => {
+        const id = state.ui.hoveredCardId;
+        if (id) promptController.delete(id); else bulkController.deleteSelected();
+    }},
 ];
 
 // ============================================
 // INIT
 // ============================================
-export function init() {
-    appInitializer.initialize(() => {
+export async function init() {
+    await appInitializer.initialize(() => {
         hotkeyManager.registerAll(APP_HOTKEYS);
         hotkeyManager.init();
         hotkeyManager.renderShortcuts('shortcutsList');

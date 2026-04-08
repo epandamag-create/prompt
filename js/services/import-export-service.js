@@ -1,17 +1,30 @@
 import { state, stateManager } from '../state.js';
 import { storageService } from './storage-service.js';
-import { createPromptModel, duplicatePromptModel } from '../models/prompt.js';
+import { createPromptModel } from '../models/prompt.js';
 import { createCollectionModel } from '../models/collection.js';
 import { createCategoryModel } from '../models/category.js';
 import { validateAndSanitizeData } from './validation.js';
 import { showToast } from '../view/ui.js';
 import { renderAll, updateCollectionDropdown, updateCategoryDropdown } from '../view/render.js';
 import { clearPromptCache } from './prompt-service.js';
-import { generateId } from '../utils/helpers.js';
+import { safeJsonParse } from '../utils/helpers.js';
 import { IMPORT_EXPORT_LIMITS } from '../config/constants.js';
 
-// Use centralized stateManager.save() instead of duplicate function
-const saveState = () => stateManager.save();
+/**
+ * Create a download from a Blob
+ * @param {Blob} blob
+ * @param {string} filename
+ */
+function triggerDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
 
 export const importExportService = {
     /**
@@ -34,16 +47,7 @@ export const importExportService = {
             }))
         };
 
-        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
+        triggerDownload(new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' }), filename);
         showToast(`Exported ${prompts.length} prompts`, 'success');
     },
 
@@ -56,7 +60,7 @@ export const importExportService = {
     async importFromFile(file, mode = 'merge') {
         try {
             const text = await file.text();
-            const data = JSON.parse(text);
+            const data = safeJsonParse(text);
             
             // Use the comprehensive validation and sanitization from validation.js
             const { validatedData, stats, errors } = validateAndSanitizeData(data);
@@ -68,60 +72,37 @@ export const importExportService = {
             
             let importedCount = 0;
             let skippedCount = 0;
+            const skippedTitles = [];
 
-            // Handle collections first
-            if (validatedData.collections && validatedData.collections.length > 0) {
-                validatedData.collections.forEach(col => {
-                    // Check if exists
-                    const exists = state.collections.find(c => c.name === col.name);
-                    if (!exists) {
-                        const newCol = createCollectionModel({
-                            name: col.name,
-                            color: col.color
-                        });
-                        state.collections.push(newCol);
-                    }
-                });
+            // Validate import size limit BEFORE mutating state
+            if (validatedData.prompts && validatedData.prompts.length > IMPORT_EXPORT_LIMITS.MAX_PROMPTS_PER_IMPORT) {
+                return { success: false, error: `Import exceeds limit of ${IMPORT_EXPORT_LIMITS.MAX_PROMPTS_PER_IMPORT} prompts. Please split your file.` };
             }
 
-            // Handle categories
-            if (validatedData.categories && validatedData.categories.length > 0) {
-                validatedData.categories.forEach(cat => {
-                    const exists = state.categories.find(c => c.name === cat.name);
-                    if (!exists) {
-                        const newCat = createCategoryModel({
-                            name: cat.name,
-                            color: cat.color
-                        });
-                        state.categories.push(newCat);
-                    }
-                });
-            }
+            // Upsert collections and build old-id → new-id map in one pass
+            const collectionIdMap = new Map();
+            (validatedData.collections || []).forEach(col => {
+                let item = state.collections.find(c => c.name === col.name);
+                if (!item) {
+                    item = createCollectionModel({ name: col.name, color: col.color });
+                    state.collections.push(item);
+                }
+                collectionIdMap.set(col.id, item.id);
+            });
 
-            // Map old IDs to new IDs
-            const collectionMap = {};
-            const categoryMap = {};
-            
-            if (validatedData.collections) {
-                validatedData.collections.forEach((col) => {
-                    const newCol = state.collections.find(c => c.name === col.name);
-                    if (newCol) collectionMap[col.name] = newCol.id;
-                });
-            }
-            
-            if (validatedData.categories) {
-                validatedData.categories.forEach(cat => {
-                    const newCat = state.categories.find(c => c.name === cat.name);
-                    if (newCat) categoryMap[cat.name] = newCat.id;
-                });
-            }
+            // Upsert categories and build old-id → new-id map in one pass
+            const categoryIdMap = new Map();
+            (validatedData.categories || []).forEach(cat => {
+                let item = state.categories.find(c => c.name === cat.name);
+                if (!item) {
+                    item = createCategoryModel({ name: cat.name, color: cat.color });
+                    state.categories.push(item);
+                }
+                categoryIdMap.set(cat.id, item.id);
+            });
 
             // Handle prompts
             if (validatedData.prompts && validatedData.prompts.length > 0) {
-                // Validate import size limit
-                if (validatedData.prompts.length > IMPORT_EXPORT_LIMITS.MAX_PROMPTS_PER_IMPORT) {
-                    return { success: false, error: `Import exceeds limit of ${IMPORT_EXPORT_LIMITS.MAX_PROMPTS_PER_IMPORT} prompts. Please split your file.` };
-                }
                 validatedData.prompts.forEach(p => {
                     if (mode === 'merge') {
                         // Check for duplicates by title
@@ -131,6 +112,7 @@ export const importExportService = {
                         
                         if (exists) {
                             skippedCount++;
+                            skippedTitles.push(p.title);
                             return;
                         }
                     }
@@ -140,8 +122,8 @@ export const importExportService = {
                         description: p.description,
                         content: p.content,
                         tags: p.tags,
-                        collectionId: p.collectionId ? collectionMap[p.collectionId] || p.collectionId : null, // Use mapped ID or original if not mapped
-                        categoryId: p.categoryId ? categoryMap[p.categoryId] || p.categoryId : null
+                        collectionId: p.collectionId ? (collectionIdMap.get(p.collectionId) ?? null) : null,
+                        categoryId: p.categoryId ? (categoryIdMap.get(p.categoryId) ?? null) : null
                     });
                     
                     if (p.favorite) {
@@ -153,22 +135,25 @@ export const importExportService = {
                 });
             }
 
-            clearPromptCache();
-            saveState();
-            renderAll();
+            stateManager.bumpVersion(); // invalidate memoized maps in render.js
+            stateManager.commit();      // clearPromptCache + save + renderAll
             updateCollectionDropdown();
             updateCategoryDropdown();
 
-            const message = mode === 'merge' 
+            const message = mode === 'merge'
                 ? `Imported ${importedCount} prompts, ${skippedCount} skipped`
                 : `Replaced with ${importedCount} prompts`;
 
             showToast(message, 'success');
-            
-            return { 
-                success: true, 
-                imported: importedCount, 
-                skipped: skippedCount 
+            if (skippedTitles.length > 0) {
+                console.info(`Skipped ${skippedTitles.length} duplicate prompt(s):`, skippedTitles);
+            }
+
+            return {
+                success: true,
+                imported: importedCount,
+                skipped: skippedCount,
+                skippedTitles
             };
 
         } catch (error) {
@@ -206,16 +191,17 @@ export const importExportService = {
                 }
             }
             
-            if (mode === 'replace') {
-                state.prompts = [];
-                state.collections = [];
-                state.categories = [];
-            }
+            // For replace mode: build into local arrays so state is swapped atomically
+            // only after all rows are processed. A mid-loop error won't corrupt live state.
+            let workingPrompts = mode === 'replace' ? [] : state.prompts;
+            let workingCollections = mode === 'replace' ? [] : state.collections;
+            let workingCategories = mode === 'replace' ? [] : state.categories;
 
             let importedCount = 0;
             let skippedCount = 0;
+            const skippedTitlesCsv = [];
 
-            const getOrCreateId = (name, type, items, createModel) => {
+            const getOrCreateId = (name, items, createModel) => {
                 if (!name) return null;
                 let item = items.find(i => i.name.toLowerCase() === name.toLowerCase());
                 if (!item) {
@@ -227,17 +213,18 @@ export const importExportService = {
 
             promptsData.forEach(p => {
                 if (mode === 'merge') {
-                    const exists = state.prompts.find(
+                    const exists = workingPrompts.find(
                         existing => existing.title === p.Title && existing.content === p.Content
                     );
                     if (exists) {
                         skippedCount++;
+                        skippedTitlesCsv.push(p.Title);
                         return;
                     }
                 }
 
-                const collectionId = getOrCreateId(p.Collection, 'collection', state.collections, createCollectionModel);
-                const categoryId = getOrCreateId(p.Category, 'category', state.categories, createCategoryModel);
+                const collectionId = getOrCreateId(p.Collection, workingCollections, createCollectionModel);
+                const categoryId = getOrCreateId(p.Category, workingCategories, createCategoryModel);
 
                 const newPrompt = createPromptModel({
                     title: p.Title,
@@ -248,22 +235,33 @@ export const importExportService = {
                     categoryId,
                     favorite: (p.Favorite || 'false').toLowerCase() === 'true'
                 });
-                
-                state.prompts.unshift(newPrompt);
+
+                workingPrompts.unshift(newPrompt);
                 importedCount++;
             });
-            
-            clearPromptCache();
-            saveState();
-            // No need for renderAll() here, stateManager will trigger it
+
+            // Atomic swap for replace mode: only update live state after full success
+            if (mode === 'replace') {
+                state.prompts = workingPrompts;
+                state.collections = workingCollections;
+                state.categories = workingCategories;
+            }
+
+            stateManager.bumpVersion(); // invalidate memoized maps in render.js
+            stateManager.commit();      // clearPromptCache + save + renderAll
+            updateCollectionDropdown();
+            updateCategoryDropdown();
             
             const message = mode === 'merge' 
                 ? `Imported ${importedCount} prompts, ${skippedCount} skipped from CSV`
                 : `Replaced with ${importedCount} prompts from CSV`;
             
             showToast(message, 'success');
+            if (skippedTitlesCsv.length > 0) {
+                console.info(`Skipped ${skippedTitlesCsv.length} duplicate prompt(s) from CSV:`, skippedTitlesCsv);
+            }
 
-            return { success: true, imported: importedCount, skipped: skippedCount };
+            return { success: true, imported: importedCount, skipped: skippedCount, skippedTitles: skippedTitlesCsv };
         } catch (error) {
             console.error('CSV Import error:', error);
             showToast('Failed to import from CSV: ' + error.message, 'error');
@@ -304,8 +302,8 @@ export const importExportService = {
     _convertToCSV(prompts) {
         const header = ["Title", "Description", "Content", "Tags", "Collection", "Category", "Favorite"];
         
-        const getCategoryName = (id) => state.categories.find(c => c.id === id)?.name || '';
-        const getCollectionName = (id) => state.collections.find(c => c.id === id)?.name || '';
+        const categoryNameMap = new Map(state.categories.map(c => [c.id, c.name]));
+        const collectionNameMap = new Map(state.collections.map(c => [c.id, c.name]));
 
         const csvRows = prompts.map(p => {
             const row = [
@@ -313,8 +311,8 @@ export const importExportService = {
                 p.description,
                 p.content,
                 (p.tags || []).join(','),
-                getCollectionName(p.collectionId),
-                getCategoryName(p.categoryId),
+                collectionNameMap.get(p.collectionId) || '',
+                categoryNameMap.get(p.categoryId) || '',
                 p.favorite ? 'true' : 'false'
             ];
             return row.map(value => {
@@ -336,16 +334,7 @@ export const importExportService = {
      */
     exportToCsv(prompts, filename = 'prompts-export.csv') {
         const csvContent = this._convertToCSV(prompts);
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
+        triggerDownload(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }), filename);
         showToast(`Exported ${prompts.length} prompts to CSV`, 'success');
     },
 
@@ -363,16 +352,7 @@ export const importExportService = {
             sidebarSections: state.sidebarSections
         };
 
-        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `prompts-backup-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
+        triggerDownload(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }), `prompts-backup-${new Date().toISOString().split('T')[0]}.json`);
         showToast('Backup created', 'success');
     }
 };

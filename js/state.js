@@ -1,7 +1,7 @@
-import { DEFAULT_PREFERENCES } from './config/constants.js';
-import { SAVE_DEBOUNCE_MS } from './config/constants.js';
+import { DEFAULT_PREFERENCES, SAVE_DEBOUNCE_MS } from './config/constants.js';
 import { storageService } from './services/storage-service.js';
 import { clearPromptCache } from './services/prompt-service.js';
+import { buildSearchIndex } from './models/prompt.js';
 import { renderAll } from './view/render.js';
 
 /**
@@ -140,15 +140,6 @@ export function getPromptTags(prompt) {
     return Array.isArray(prompt?.tags) ? prompt.tags : [];
 }
 
-/**
- * Check if a value is a valid array
- * @param {any} value
- * @returns {boolean}
- */
-export function isValidArray(value) {
-    return Array.isArray(value);
-}
-
 // ============================================
 // STATE MANAGEMENT
 // ============================================
@@ -185,13 +176,18 @@ export let stateVersion = 0;
  */
 export const stateManager = {
     /**
-     * Save state to localStorage (with debounce)
-     * @param {boolean} immediate - Save immediately without debounce
+     * Save state to IndexedDB (with debounce).
+     * @param {boolean} immediate - Skip debounce and save right away
      */
     save(immediate = false) {
         clearTimeout(saveTimeout);
-        
-        const doSave = () => {
+
+        const doSave = async () => {
+            // NOTE: state.ui is intentionally excluded from persistence.
+            // It contains purely ephemeral runtime state (open modals, active
+            // toasts, selected prompts, dropdown state, hover tracking) that
+            // must always start fresh on page load and must never be written
+            // to IndexedDB or cross-tab sync messages.
             const data = {
                 prompts: state.prompts,
                 collections: state.collections,
@@ -199,34 +195,18 @@ export const stateManager = {
                 preferences: state.preferences,
                 sidebarSections: state.sidebarSections
             };
-            
-            const result = storageService.save(data);
-            if (!result.success && result.error?.name === 'QuotaExceededError') {
-                const info = storageService.getInfo();
-                const sizeKB = info ? info.sizeKB : 'N/A';
-                
-                if (confirm(
-                    `⚠️ STORAGE FULL\n\n` +
-                    `Your data could not be saved due to storage limits.\n` +
-                    `Current size: ${sizeKB}KB\n` +
-                    `Limit: ~5MB\n\n` +
-                    `IMPORTANT: Your recent changes may be lost!\n\n` +
-                    `Click OK to export all data now (recommended).\n` +
-                    `Click Cancel to continue without saving.`
-                )) {
-                    // Trigger export - will be handled by events.js
-                    window.dispatchEvent(new CustomEvent('app:export-requested'));
-                }
-                console.error('Error saving to storage:', result.error);
-                // Show toast - will be handled by events.js
-                window.dispatchEvent(new CustomEvent('app:toast', { 
-                    detail: { message: 'Failed to save data. Check console for errors.', type: 'error' } 
+
+            const result = await storageService.save(data);
+            if (!result.success) {
+                console.error('Error saving to IndexedDB:', result.error);
+                window.dispatchEvent(new CustomEvent('app:toast', {
+                    detail: { message: 'Failed to save data. Check console for errors.', type: 'error' }
                 }));
             }
         };
-        
+
         if (immediate) {
-            doSave();
+            return doSave(); // return Promise so callers can await
         } else {
             saveTimeout = setTimeout(doSave, SAVE_DEBOUNCE_MS);
         }
@@ -276,7 +256,7 @@ export const stateManager = {
      */
     addPrompt(prompt, index = 0) {
         stateVersion++;
-        if (index === 0 || index === undefined) {
+        if (index === 0) {
             state.prompts.unshift(prompt);
         } else {
             state.prompts.splice(index, 0, prompt);
@@ -292,9 +272,14 @@ export const stateManager = {
     updatePrompt(id, updates) {
         const prompt = state.prompts.find(p => p.id === id);
         if (!prompt) return false;
-        
+
         stateVersion++;
         Object.assign(prompt, updates);
+
+        // Keep the cached search index in sync (e.g. after undo/redo restores
+        // title/description/content/tags from a snapshot).
+        prompt._searchIndex = buildSearchIndex(prompt);
+
         return true;
     },
 
@@ -437,6 +422,13 @@ export const stateManager = {
     },
 
     /**
+     * Increment the state version counter (for cache invalidation)
+     */
+    bumpVersion() {
+        stateVersion++;
+    },
+
+    /**
      * Check if app is initialized
      * @returns {boolean}
      */
@@ -453,11 +445,27 @@ export const stateManager = {
     },
 
     /**
-     * Load state from localStorage
-     * @returns {Object|null} Loaded data or null
+     * Load state from IndexedDB.
+     * @returns {Promise<Object|null>}
      */
-    loadFromStorage() {
+    async loadFromStorage() {
         return storageService.load();
+    },
+
+    /**
+     * Reload state from IndexedDB (called on cross-tab sync signal).
+     */
+    async reloadFromTabSync() {
+        const loadedData = await storageService.load();
+        if (!loadedData) return;
+        state.prompts = loadedData.prompts ?? [];
+        state.collections = loadedData.collections ?? [];
+        state.categories = loadedData.categories ?? [];
+        state.preferences = { ...state.preferences, ...loadedData.preferences };
+        state.sidebarSections = { ...state.sidebarSections, ...loadedData.sidebarSections };
+        stateVersion++; // invalidate memoized Maps in render.js (_mapVersion, _favCountVersion)
+        clearPromptCache();
+        renderAll();
     }
 };
 
@@ -495,6 +503,9 @@ export const state = {
         currentConfirmId: 0, // Track current confirm dialog ID for race condition prevention
         
         // Dropdown menus state (instead of DOM .open classes)
-        openDropdowns: new Set()
+        openDropdowns: new Set(),
+
+        // ID of prompt card currently hovered (for card hotkeys)
+        hoveredCardId: null
     }
 };

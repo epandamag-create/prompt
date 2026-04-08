@@ -1,4 +1,4 @@
-import { sanitizeId, generateId, extractVariables, validateField, isValidId } from '../utils/helpers.js';
+import { sanitizeId, generateId, extractVariables, validateField } from '../utils/helpers.js';
 import { buildSearchIndex } from '../models/prompt.js';
 import { COLORS, VALIDATION_RULES } from '../config/constants.js';
 
@@ -36,8 +36,9 @@ export function validateAndSanitizeData(data) {
             const newId = sanitizeId(c.id) || generateId();
             if (oldId && oldId !== newId) {
                 collectionIdMap.set(oldId, newId);
+                errors.push(`Collection #${i+1}: ID "${oldId}" contained invalid characters and was sanitized to "${newId}".`);
             }
-            
+
             // Validate name using validation rules
             const nameValidation = validateField(c.name, VALIDATION_RULES.collection.name, 'Collection name');
             if (!nameValidation.valid) {
@@ -45,11 +46,7 @@ export function validateAndSanitizeData(data) {
                 return null;
             }
             
-            // Validate ID format if provided
-            if (c.id && !isValidId(c.id)) {
-                errors.push(`Collection #${i+1} (ID: ${oldId ?? 'N/A'}): ${VALIDATION_RULES.collection.id.message}`);
-                // Continue with sanitized ID rather than rejecting
-            }
+            // Note: ID was auto-corrected via sanitizeId() above if invalid
             
             // Validate color if provided
             if (c.color && !isValidHexColor(c.color)) {
@@ -77,6 +74,7 @@ export function validateAndSanitizeData(data) {
             const newId = sanitizeId(cat.id) || generateId();
             if (oldId && oldId !== newId) {
                 categoryIdMap.set(oldId, newId);
+                errors.push(`Category #${i+1}: ID "${oldId}" contained invalid characters and was sanitized to "${newId}".`);
             }
 
             // Validate name using validation rules
@@ -86,11 +84,7 @@ export function validateAndSanitizeData(data) {
                 return null;
             }
             
-            // Validate ID format if provided
-            if (cat.id && !isValidId(cat.id)) {
-                errors.push(`Category #${i+1} (ID: ${oldId ?? 'N/A'}): ${VALIDATION_RULES.category.id.message}`);
-                // Continue with sanitized ID rather than rejecting
-            }
+            // Note: ID was auto-corrected via sanitizeId() above if invalid
             
             // Validate color if provided
             if (cat.color && !isValidHexColor(cat.color)) {
@@ -163,8 +157,13 @@ export function validateAndSanitizeData(data) {
                 lastUsed: p.lastUsed ?? null,
                 createdAt: typeof p.createdAt === 'number' ? p.createdAt : Date.now(),
                 updatedAt: typeof p.updatedAt === 'number' ? p.updatedAt : Date.now(),
-                _searchIndex: buildSearchIndex({title: p.title, description: p.description ?? '', content: p.content, tags: p.tags ?? []})
             };
+            Object.defineProperty(prompt, '_searchIndex', {
+                value: buildSearchIndex({ title: p.title, description: p.description ?? '', content: p.content, tags: p.tags ?? [] }),
+                enumerable: false,
+                writable: true,
+                configurable: true,
+            });
             return prompt;
         })
         .filter(Boolean);

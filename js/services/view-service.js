@@ -22,6 +22,14 @@ export const viewService = {
      */
     setView(view) {
         state.currentView = view;
+        // Clear active search so the new view isn't silently filtered
+        if (state.searchQuery) {
+            state.searchQuery = '';
+            const searchEl = document.getElementById('searchInput');
+            if (searchEl) searchEl.value = '';
+            const mobileSearchEl = document.getElementById('mobileSearchInput');
+            if (mobileSearchEl) mobileSearchEl.value = '';
+        }
         clearPromptCache();
         renderAll();
         saveState();

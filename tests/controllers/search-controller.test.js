@@ -20,6 +20,11 @@ describe('Controller: SearchController', () => {
     let mockSetSearchQueryCalledWith = null;
     let mockClearSearchCalled = false;
 
+    function teardown() {
+        filterService.setSearchQuery = originalSetSearchQuery;
+        filterService.clearSearch = originalClearSearch;
+    }
+
     function resetTestEnvironment() {
         // 1. Reset DOM
         container.innerHTML = `
@@ -88,6 +93,7 @@ describe('Controller: SearchController', () => {
         
         // Verify clear button visibility toggled
         expect(clearBtn.classList.contains('visible')).toBe(true);
+        teardown();
     });
 
     it('clearSearch should clear inputs and reset service', async () => {
@@ -107,6 +113,7 @@ describe('Controller: SearchController', () => {
         
         // It should also trigger a search with empty string to update UI
         expect(mockSetSearchQueryCalledWith).toBe('');
+        teardown();
     });
 
     it('handleTagInput should show suggestions based on existing tags', async () => {
@@ -133,5 +140,6 @@ describe('Controller: SearchController', () => {
         expect(suggestions.innerHTML).toContain('java');
         // Should NOT match 'react'
         expect(suggestions.innerHTML).not.toContain('react');
+        teardown();
     });
 });

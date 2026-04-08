@@ -1,3 +1,20 @@
+/*
+ * CSS Layer Declaration
+ * ─────────────────────
+ * Establishes cascade priority (lowest → highest specificity).
+ *
+ *   @layer base       — resets, CSS custom properties, typography
+ *   @layer layout     — header, sidebar, main-content structure
+ *   @layer components — cards, modals, toasts, forms, buttons
+ *   @layer utilities  — density variants, view-mode overrides
+ *   @layer themes     — light-theme token overrides
+ *
+ * Rules not yet wrapped in a named layer fall outside the layer
+ * system and always win, maintaining full backwards compatibility
+ * while allowing gradual migration to @layer blocks.
+ */
+@layer base, layout, components, utilities, themes;
+
           /* ============================================
            CSS VARIABLES (Dark Theme - Default)
            ============================================ */
@@ -62,24 +79,43 @@
             --z-toast: 3000;
         }
 
-        /* Light Theme */
-        [data-theme="light"] {
-            --bg-main: #f5f5f5;
-            --bg-card: #ffffff;
-            --bg-sidebar: #fafafa;
-            --bg-header: #ffffff;
-            --bg-input: #f0f0f0;
-            --bg-code: #f8f8f8;
+        /* Light Theme — wrapped in @layer themes so base/component rules can
+           use lower specificity without accidentally beating theme tokens. */
+        @layer themes {
+            [data-theme="light"] {
+                --bg-main: #f5f5f5;
+                --bg-card: #ffffff;
+                --bg-sidebar: #fafafa;
+                --bg-header: #ffffff;
+                --bg-input: #f0f0f0;
+                --bg-code: #f8f8f8;
 
-            --text-primary: #1a1a1a;
-            --text-secondary: #555555;
-            --text-muted: #888888;
+                --text-primary: #1a1a1a;
+                --text-secondary: #555555;
+                --text-muted: #888888;
 
-            --border-color: #e0e0e0;
-            --border-hover: #cccccc;
+                --border-color: #e0e0e0;
+                --border-hover: #cccccc;
 
-            --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
-            --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.12);
+                --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
+                --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.12);
+            }
+
+            /* WCAG AA contrast for tag chips in light theme */
+            [data-theme="light"] .tag-chip {
+                color: #333333;
+                background: #e8e8e8;
+                border-color: #cccccc;
+            }
+
+            [data-theme="light"] .tag-chip:hover {
+                color: #111111;
+                background: #d8d8d8;
+            }
+
+            [data-theme="light"] .prompt-tag {
+                color: #2563eb;
+            }
         }
 
         /* Density: Compact */
@@ -715,6 +751,32 @@
             background-color: rgba(255, 255, 255, 0.2);
         }
 
+        /* Drag-and-drop reordering */
+        .drag-handle {
+            opacity: 0;
+            cursor: grab;
+            color: var(--text-secondary);
+            font-size: 14px;
+            padding: 0 2px;
+            flex-shrink: 0;
+            transition: opacity var(--transition-fast);
+            user-select: none;
+        }
+        .collection-item:hover .drag-handle,
+        .category-item:hover .drag-handle { opacity: 1; }
+        .collection-item.dragging,
+        .category-item.dragging { opacity: 0.4; }
+        .collection-item.drag-over,
+        .category-item.drag-over {
+            border-top: 2px solid var(--accent);
+        }
+        .collection-item.prompt-drop-target,
+        .category-item.prompt-drop-target {
+            background: color-mix(in srgb, var(--accent) 15%, transparent);
+            outline: 2px dashed var(--accent);
+            outline-offset: -2px;
+        }
+
         .add-collection-btn {
             display: flex;
             align-items: center;
@@ -774,6 +836,34 @@
         .tag-chip .tag-count {
             font-size: 10px;
             opacity: 0.7;
+        }
+
+        .tag-chip--hidden {
+            display: none;
+        }
+
+        .tags-cloud.expanded {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .tag-more-btn {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            background: transparent;
+            border: 1px dashed var(--border-color);
+            border-radius: 12px;
+            font-size: 11px;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .tag-more-btn:hover {
+            background: var(--bg-input);
+            border-color: var(--border-hover);
+            color: var(--text-secondary);
         }
 
         .sidebar-action-btn {
@@ -857,6 +947,34 @@
             grid-template-columns: 1fr;
         }
 
+        /* Fix #17: Skeleton loading cards */
+        @keyframes skeleton-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .skeleton-card {
+            background: var(--bg-card);
+            border: 1px solid transparent;
+            border-radius: var(--radius-lg);
+            padding: var(--card-padding);
+            min-height: var(--card-min-height);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            animation: skeleton-pulse 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-line {
+            background: var(--border-color);
+            border-radius: 4px;
+            height: 14px;
+        }
+
+        .skeleton-line.short { width: 40%; }
+        .skeleton-line.medium { width: 70%; }
+        .skeleton-line.full { width: 100%; }
+
         .prompt-card {
             background: var(--bg-card);
             border: 1px solid transparent;
@@ -874,6 +992,13 @@
         .prompt-card:hover {
             border-color: var(--border-hover);
             box-shadow: var(--shadow-card-hover);
+        }
+
+        /* Fix #11: Keyboard focus indicator */
+        .prompt-card:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+            border-color: var(--accent);
         }
 
         .prompt-card-header {
@@ -1447,6 +1572,13 @@
             gap: 6px;
         }
 
+        /* Fix #15: Disabled button state */
+        .btn:disabled, button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
         .btn-primary {
             background: var(--accent);
             color: white;
@@ -1496,10 +1628,22 @@
         /* ============================================
            TOAST NOTIFICATIONS
            ============================================ */
-        .toast {
+        /* Fix #7: Container handles stacking — no JS offsetHeight reads */
+        #toastContainer {
             position: fixed;
             bottom: 24px;
             right: 24px;
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 8px;
+            z-index: var(--z-toast);
+            pointer-events: none;
+        }
+
+        .toast {
+            position: relative;
+            bottom: auto;
+            right: auto;
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: var(--radius-md);
@@ -1508,8 +1652,8 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            z-index: var(--z-toast);
-            transform: translateY(100px);
+            pointer-events: auto;
+            transform: translateY(20px);
             opacity: 0;
             transition: all var(--transition-normal);
         }
@@ -1931,6 +2075,45 @@
         /* Bulk move */
         .bulk-move-list { display: flex; flex-direction: column; gap: 8px; }
         .bulk-move-count-text { color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5; }
+
+        /* Bulk edit tags */
+        .bulk-tags-mode-selector {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 20px;
+        }
+        .bulk-tags-mode-btn {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+        }
+        .bulk-tags-mode-btn:hover { background: var(--bg-sidebar); color: var(--text-primary); }
+        .bulk-tags-mode-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .bulk-tags-current { margin-bottom: 4px; }
+        .bulk-tags-current-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+        .bulk-tags-current-list { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
+        .bulk-tag-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--accent) 15%, transparent);
+            color: var(--accent);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+            transition: background var(--transition-fast);
+        }
+        .bulk-tag-badge:hover { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+        .bulk-tags-empty { font-size: 12px; color: var(--text-secondary); font-style: italic; }
         
         /* Clear values button */
         .clear-values-btn { margin-right: auto; }

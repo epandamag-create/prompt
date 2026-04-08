@@ -1,16 +1,54 @@
 // ============================================
 // IMPORTS
 // ============================================
-import { state } from '../state.js';
+import { state, stateVersion } from '../state.js';
 import { getFilteredPrompts } from '../services/prompt-service.js';
 import { sanitizeId, escapeHtml, highlightMarkdown, formatDate } from '../utils/helpers.js';
-import { PAGINATION_THRESHOLD, ITEMS_PER_PAGE } from '../config/constants.js';
+import { PAGINATION_THRESHOLD, ITEMS_PER_PAGE, VIEWS } from '../config/constants.js';
+
+const MAX_PREVIEW_CHARS = 500;
+
+// Whitelist hex colors to prevent CSS injection via user-supplied category/collection colors.
+// Accepts only 6-digit hex values; falls back to the provided default otherwise.
+const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
+function safeColor(color, fallback) {
+    return HEX_COLOR_RE.test(color) ? color : fallback;
+}
 
 // Pagination state (not moved to constants as it's runtime state)
 let paginationState = {
     currentPage: 1,
     totalPages: 1
 };
+
+// AbortController for pagination click handler cleanup (Fix #9)
+let paginationAbortController = null;
+
+// Memoized Maps for O(1) lookups — invalidated on stateVersion change (Fix #8)
+let _mapVersion = -1;
+let _categoryMap = null;
+let _collectionMap = null;
+
+// Cached favorites count — recalculated only when stateVersion changes
+let _favCountVersion = -1;
+let _cachedFavCount = 0;
+
+function getCategoryMap() {
+    if (_mapVersion !== stateVersion) {
+        _categoryMap = new Map(state.categories.map(c => [c.id, c]));
+        _collectionMap = new Map(state.collections.map(c => [c.id, c]));
+        _mapVersion = stateVersion;
+    }
+    return _categoryMap;
+}
+
+function getCollectionMap() {
+    getCategoryMap(); // ensure maps are fresh
+    return _collectionMap;
+}
+
+// Last render key for avoiding redundant DOM updates (Fix #10)
+let _lastRenderKey = null;
 
 export function renderAll(updates = {}) {
     const renderEverything = Object.keys(updates).length === 0;
@@ -45,10 +83,11 @@ export function renderAll(updates = {}) {
 export function renderPrompts() {
     const grid = document.getElementById('promptGrid');
     if (!grid) return;
-    
+
     const prompts = getFilteredPrompts() || [];
-    
+
     if (prompts.length === 0) {
+        _lastRenderKey = null;
         renderEmptyState(grid);
         updateStats(prompts.length);
         removePagination(document.getElementById('paginationControls'));
@@ -57,18 +96,18 @@ export function renderPrompts() {
 
     // Check if we should use pagination
     const usePagination = prompts.length > PAGINATION_THRESHOLD;
-    
+
     // Calculate which prompts to show
     let promptsToRender = prompts;
     let currentPage = paginationState.currentPage;
-    
+
     if (usePagination) {
         paginationState.totalPages = Math.ceil(prompts.length / ITEMS_PER_PAGE);
         // Clamp current page to valid range
         if (currentPage < 1) currentPage = 1;
         if (currentPage > paginationState.totalPages) currentPage = paginationState.totalPages;
         paginationState.currentPage = currentPage;
-        
+
         const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
         const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, prompts.length);
         promptsToRender = prompts.slice(startIndex, endIndex);
@@ -77,26 +116,37 @@ export function renderPrompts() {
         paginationState.totalPages = 1;
     }
 
-    // Clear empty state if it exists
-    if (grid.querySelector('.empty-state')) {
+    // Fix #10: Skip DOM update if nothing changed
+    const renderKey = `${stateVersion}|${currentPage}|${promptsToRender.map(p => p.id + ':' + (p.updatedAt ?? 0)).join(',')}`;
+    if (renderKey === _lastRenderKey && !grid.querySelector('.empty-state, .skeleton-card')) {
+        updateStats(prompts.length);
+        if (usePagination) renderPagination(grid, prompts);
+        return;
+    }
+    _lastRenderKey = renderKey;
+
+    // Clear empty/skeleton state if it exists
+    if (grid.querySelector('.empty-state, .skeleton-card')) {
         grid.innerHTML = '';
     }
 
-    // Use DocumentFragment for batch DOM insertion
+    // Use DocumentFragment for batch DOM insertion (Fix #8: memoized maps)
     const fragment = document.createDocumentFragment();
-    
+    const categoryMap = getCategoryMap();
+    const collectionMap = getCollectionMap();
+
     promptsToRender.forEach(prompt => {
-        const card = generatePromptCardHTML(prompt);
+        const card = generatePromptCardHTML(prompt, categoryMap, collectionMap);
         fragment.appendChild(card);
     });
-    
+
     // Single DOM operation instead of multiple appends
     grid.innerHTML = '';
     grid.appendChild(fragment);
 
     updateStats(prompts.length);
     if (usePagination) {
-        const pagination = renderPagination(grid, prompts);
+        renderPagination(grid, prompts);
     } else {
         removePagination(document.getElementById('paginationControls'));
     }
@@ -166,11 +216,15 @@ function renderPagination(grid, prompts) {
     html += '</div>';
     pagination.innerHTML = html;
     
-    // Use event delegation - single handler for all buttons
-    const paginationHandler = (e) => {
+    // Fix #9: Use AbortController for clean listener lifecycle
+    if (paginationAbortController) {
+        paginationAbortController.abort();
+    }
+    paginationAbortController = new AbortController();
+
+    pagination.addEventListener('click', (e) => {
         const btn = e.target.closest('.pagination-btn');
         if (!btn) return;
-        
         e.stopPropagation();
         const action = btn.dataset.action;
         if (action === 'page-prev') {
@@ -181,36 +235,26 @@ function renderPagination(grid, prompts) {
             paginationState.currentPage = parseInt(action.replace('page-', ''));
         }
         renderPrompts();
-    };
-    
-    // Remove old handler if exists
-    if (pagination._handler) {
-        pagination.removeEventListener('click', pagination._handler);
-    }
-    pagination._handler = paginationHandler;
-    pagination.addEventListener('click', paginationHandler);
-    
+    }, { signal: paginationAbortController.signal });
+
     return pagination;
 }
 
 function removePagination(pagination) {
-    if (pagination) {
-        // Clean up event handler before removing
-        if (pagination._handler) {
-            pagination.removeEventListener('click', pagination._handler);
-            pagination._handler = null;
-        }
-        pagination.remove();
+    if (paginationAbortController) {
+        paginationAbortController.abort();
+        paginationAbortController = null;
     }
+    if (pagination) pagination.remove();
 }
 
 // ============================================
 // RENDERING
 // ============================================
-function generatePromptCardHTML(prompt) {
+function generatePromptCardHTML(prompt, categoryMap, collectionMap) {
     const hasVariables = prompt.variables && prompt.variables.length > 0;
-    const category = state.categories.find(c => c.id === prompt.categoryId);
-    const collection = state.collections.find(c => c.id === prompt.collectionId);
+    const category = categoryMap.get(prompt.categoryId);
+    const collection = collectionMap.get(prompt.collectionId);
     const safeId = sanitizeId(prompt.id);
     const isSelected = state.ui.selectedPrompts.has(prompt.id);
     
@@ -218,12 +262,13 @@ function generatePromptCardHTML(prompt) {
     div.className = `prompt-card ${isSelected ? 'selected' : ''}`;
     div.setAttribute('role', 'article');
     div.setAttribute('aria-label', prompt.title);
+    div.setAttribute('tabindex', '0');
+    div.setAttribute('draggable', 'true');
     div.dataset.promptId = safeId;
     div.dataset.originalId = prompt.id;
     div.dataset.updatedAt = prompt.updatedAt;
     div.dataset.favorite = prompt.favorite;
     
-    const MAX_PREVIEW_CHARS = 500;
     const previewContent = prompt.content.length > MAX_PREVIEW_CHARS 
         ? prompt.content.substring(0, MAX_PREVIEW_CHARS) + '...' 
         : prompt.content;
@@ -232,8 +277,8 @@ function generatePromptCardHTML(prompt) {
         <div class="prompt-card-header">
             <div class="prompt-title" data-action="edit" title="Click to edit">${escapeHtml(prompt.title)}</div>
             <div class="prompt-badges">
-                ${category ? `<span class="prompt-category-badge" style="background: ${category.color};" data-action="filter-category" data-id="${sanitizeId(category.id)}">${escapeHtml(category.name)}</span>` : ''}
-                ${collection ? `<span class="prompt-collection-badge" style="border-color: ${collection.color}; color: ${collection.color};" data-action="filter-collection" data-id="${sanitizeId(collection.id)}" title="Collection: ${escapeHtml(collection.name)}">📁 ${escapeHtml(collection.name)}</span>` : ''}
+                ${category ? `<span class="prompt-category-badge" style="background: ${safeColor(category.color, '#8b5cf6')};" data-action="filter-category" data-id="${sanitizeId(category.id)}">${escapeHtml(category.name)}</span>` : ''}
+                ${collection ? `<span class="prompt-collection-badge" style="border-color: ${safeColor(collection.color, '#3b82f6')}; color: ${safeColor(collection.color, '#3b82f6')};" data-action="filter-collection" data-id="${sanitizeId(collection.id)}" title="Collection: ${escapeHtml(collection.name)}">📁 ${escapeHtml(collection.name)}</span>` : ''}
             </div>
             <button class="prompt-favorite ${prompt.favorite ? 'active' : ''}" data-action="toggle-favorite" title="${prompt.favorite ? 'Remove from favorites' : 'Add to favorites'}" aria-label="${prompt.favorite ? 'Remove from favorites' : 'Add to favorites'}" aria-pressed="${prompt.favorite}">
                 <svg fill="${prompt.favorite ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24">
@@ -320,20 +365,22 @@ function generateEmptyStateHTML(isFiltered) {
 }
 
 function renderEmptyState(grid) {
-    const isFiltered = state.searchQuery || state.currentView !== 'all';
+    const isFiltered = state.searchQuery || state.currentView !== VIEWS.ALL;
     grid.innerHTML = generateEmptyStateHTML(isFiltered);
 }
 
 export function renderCollections(promptCounts) {
     const container = document.getElementById('collectionsList');
     if (state.collections.length === 0) { container.innerHTML = ''; return; }
+    if (!promptCounts) return; // counts not available; leave existing DOM intact
 
     container.innerHTML = state.collections.map(collection => {
         const count = promptCounts[collection.id] || 0;
-        const color = collection.color || '#3b82f6';
+        const color = safeColor(collection.color, '#3b82f6');
         const safeId = sanitizeId(collection.id);
         return `
-            <div class="collection-item" data-action="set-collection-view" data-id="${safeId}" data-original-id="${escapeHtml(collection.id)}" role="treeitem" aria-label="${escapeHtml(collection.name)}, ${count} prompts">
+            <div class="collection-item" draggable="true" data-action="set-collection-view" data-id="${safeId}" data-original-id="${escapeHtml(collection.id)}" role="treeitem" aria-label="${escapeHtml(collection.name)}, ${count} prompts" title="${escapeHtml(collection.name)}">
+                <span class="drag-handle" title="Drag to reorder">⠿</span>
                 <span class="collection-color-dot" style="background: ${color};"></span>
                 <span class="collection-item-name">${escapeHtml(collection.name)}</span>
                 <span class="collection-item-count">${count}</span>
@@ -356,13 +403,15 @@ export function renderCollections(promptCounts) {
 export function renderCategories(categoryCounts) {
     const container = document.getElementById('categoriesList');
     if (state.categories.length === 0) { container.innerHTML = ''; return; }
+    if (!categoryCounts) return; // counts not available; leave existing DOM intact
 
     container.innerHTML = state.categories.map(cat => {
         const count = categoryCounts[cat.id] || 0;
-        const color = cat.color || '#8b5cf6';
+        const color = safeColor(cat.color, '#8b5cf6');
         const safeId = sanitizeId(cat.id);
         return `
-            <div class="category-item" data-action="set-category-view" data-id="${safeId}" data-original-id="${escapeHtml(cat.id)}" role="treeitem" aria-label="${escapeHtml(cat.name)}, ${count} prompts">
+            <div class="category-item" draggable="true" data-action="set-category-view" data-id="${safeId}" data-original-id="${escapeHtml(cat.id)}" role="treeitem" aria-label="${escapeHtml(cat.name)}, ${count} prompts" title="${escapeHtml(cat.name)}">
+                <span class="drag-handle" title="Drag to reorder">⠿</span>
                 <span class="category-dot" style="background: ${color};"></span>
                 <span class="category-item-name">${escapeHtml(cat.name)}</span>
                 <span class="category-item-count">${count}</span>
@@ -382,23 +431,43 @@ export function renderCategories(categoryCounts) {
     }).join('');
 }
 
+const TAGS_VISIBLE_COUNT = 15;
+
 export function renderTags(tagCounts) {
+    if (!tagCounts) return;
     const container = document.getElementById('tagsList');
-    const tags = Object.entries(tagCounts).sort((a, b) => a[0].localeCompare(b[0]));
+    // Sort by usage count descending, then alphabetically for equal counts
+    const tags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 
     if (tags.length === 0) {
         container.innerHTML = '<div style="padding: 4px 8px; color: var(--text-muted); font-size: 12px;">No tags yet</div>';
         return;
     }
 
-    container.className = 'tags-cloud';
-    container.innerHTML = tags.map(([tag, count]) => {
-        return `
-        <div class="tag-chip" data-action="set-tag-view" data-tag="${escapeHtml(tag)}" role="treeitem" aria-label="Tag ${escapeHtml(tag)}, ${count} prompts">
+    const wasExpanded = container.classList.contains('expanded');
+
+    const visible = tags.slice(0, TAGS_VISIBLE_COUNT);
+    const hidden = tags.slice(TAGS_VISIBLE_COUNT);
+
+    const chipHTML = ([tag, count], extraClass = '') => `
+        <div class="tag-chip${extraClass}" data-action="set-tag-view" data-tag="${escapeHtml(tag)}" role="treeitem" aria-label="Tag ${escapeHtml(tag)}, ${count} prompts">
             <span>#${escapeHtml(tag)}</span>
             <span class="tag-count">${count}</span>
         </div>`;
-    }).join('');
+
+    const moreBtn = hidden.length > 0
+        ? `<button class="tag-more-btn" data-action="toggle-tags-more"${wasExpanded ? ' data-expanded="true"' : ''}>+${hidden.length} more</button>`
+        : '';
+
+    container.className = `tags-cloud${wasExpanded ? ' expanded' : ''}`;
+    container.innerHTML =
+        visible.map(t => chipHTML(t)).join('') +
+        hidden.map(t => chipHTML(t, wasExpanded ? '' : ' tag-chip--hidden')).join('') +
+        moreBtn;
+    if (wasExpanded) {
+        const btn = container.querySelector('.tag-more-btn');
+        if (btn) btn.textContent = 'Show less';
+    }
 }
 
 // ============================================
@@ -409,13 +478,22 @@ export function renderFilterBar() {
     if (!bar) return;
     const chips = [];
 
+    const catMap = getCategoryMap();
+    const colMap = getCollectionMap();
+
     state.currentCategories.forEach(id => {
-        const cat = state.categories.find(c => c.id === id);
-        if (cat) chips.push(`<span class="filter-chip" style="background: ${cat.color}22; color: ${cat.color};"><span>${escapeHtml(cat.name)}</span><span class="filter-chip-remove" data-action="set-category-view" data-id="${sanitizeId(id)}">&times;</span></span>`);
+        const cat = catMap.get(id);
+        if (cat) {
+            const c = safeColor(cat.color, '#8b5cf6');
+            chips.push(`<span class="filter-chip" style="background: ${c}22; color: ${c};"><span>${escapeHtml(cat.name)}</span><span class="filter-chip-remove" data-action="set-category-view" data-id="${sanitizeId(id)}">&times;</span></span>`);
+        }
     });
     state.currentCollections.forEach(id => {
-        const col = state.collections.find(c => c.id === id);
-        if (col) chips.push(`<span class="filter-chip" style="background: ${col.color}22; color: ${col.color};"><span>${escapeHtml(col.name)}</span><span class="filter-chip-remove" data-action="set-collection-view" data-id="${sanitizeId(id)}">&times;</span></span>`);
+        const col = colMap.get(id);
+        if (col) {
+            const c = safeColor(col.color, '#3b82f6');
+            chips.push(`<span class="filter-chip" style="background: ${c}22; color: ${c};"><span>${escapeHtml(col.name)}</span><span class="filter-chip-remove" data-action="set-collection-view" data-id="${sanitizeId(id)}">&times;</span></span>`);
+        }
     });
     state.currentTags.forEach(tag => {
         chips.push(`<span class="filter-chip"><span>#${escapeHtml(tag)}</span><span class="filter-chip-remove" data-action="set-tag-view" data-tag="${escapeHtml(tag)}">&times;</span></span>`);
@@ -433,87 +511,85 @@ export function renderFilterBar() {
 export function updateStats(count) {
     document.getElementById('statsDisplay').textContent = `${count} prompt${count !== 1 ? 's' : ''}`;
     document.getElementById('allCount').textContent = state.prompts.length;
-    document.getElementById('favCount').textContent = state.prompts.filter(p => p.favorite).length;
+    if (_favCountVersion !== stateVersion) {
+        _cachedFavCount = state.prompts.reduce((n, p) => n + (p.favorite ? 1 : 0), 0);
+        _favCountVersion = stateVersion;
+    }
+    document.getElementById('favCount').textContent = _cachedFavCount;
 }
 
 export function updateSidebarHighlights() {
-    // Single query for all sidebar items with data-action
     const sidebarItems = document.querySelectorAll('[data-view], [data-id], [data-tag]');
-    
+    const colSet = new Set(state.currentCollections);
+    const catSet = new Set(state.currentCategories);
+    const tagSet = new Set(state.currentTags);
+
     sidebarItems.forEach(item => {
         if (item.classList.contains('quick-access-item')) {
             const isQuickView = ['all', 'favorites', 'recent'].includes(state.currentView);
             item.classList.toggle('active', isQuickView && item.dataset.view === state.currentView);
         } else if (item.classList.contains('collection-item')) {
-            // Use original ID for comparison with state
             const itemId = item.dataset.originalId || item.dataset.id;
-            item.classList.toggle('active', state.currentCollections.includes(itemId));
+            item.classList.toggle('active', colSet.has(itemId));
         } else if (item.classList.contains('category-item')) {
-            // Use original ID for comparison with state
             const itemId = item.dataset.originalId || item.dataset.id;
-            item.classList.toggle('active', state.currentCategories.includes(itemId));
+            item.classList.toggle('active', catSet.has(itemId));
         } else if (item.classList.contains('tag-chip')) {
-            item.classList.toggle('active', state.currentTags.includes(item.dataset.tag));
+            item.classList.toggle('active', tagSet.has(item.dataset.tag));
         }
     });
 }
 
 export function updateContentTitle() {
+    const titleEl = document.getElementById('contentTitle');
+    if (!titleEl) return;
+
+    // Fix #6: Include result count in search title
+    if (state.searchQuery) {
+        const count = getFilteredPrompts().length;
+        titleEl.textContent = `Search: "${state.searchQuery}" (${count} result${count !== 1 ? 's' : ''})`;
+        return;
+    }
     const parts = [];
-    if (state.currentView === 'favorites') parts.push('Favorites');
-    else if (state.currentView === 'recent') parts.push('Recent');
+    if (state.currentView === VIEWS.FAVORITES) parts.push('Favorites');
+    else if (state.currentView === VIEWS.RECENT) parts.push('Recent');
+
+    // Fix #8: use memoized maps
+    const catMap = getCategoryMap();
+    const colMap = getCollectionMap();
 
     state.currentCategories.forEach(id => {
-        const cat = state.categories.find(c => c.id === id);
+        const cat = catMap.get(id);
         if (cat) parts.push(cat.name);
     });
     state.currentCollections.forEach(id => {
-        const col = state.collections.find(c => c.id === id);
+        const col = colMap.get(id);
         if (col) parts.push(col.name);
     });
     state.currentTags.forEach(tag => parts.push('#' + tag));
 
-    if (parts.length === 0) {
-        document.getElementById('contentTitle').textContent = 'All Prompts';
-    } else {
-        document.getElementById('contentTitle').textContent = parts.join(' + ');
+    titleEl.textContent = parts.length === 0 ? 'All Prompts' : parts.join(' + ');
+}
+
+function updateDropdown(selectId, items, defaultLabel, selectedId) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    select.innerHTML = `<option value="">${defaultLabel}</option>`;
+    items.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = item.name;
+        select.appendChild(option);
+    });
+    if (selectedId) {
+        select.value = selectedId;
     }
 }
 
 export function updateCollectionDropdown(selectedId = null) {
-    const select = document.getElementById('promptCollection');
-    if (!select) return;
-    select.innerHTML = '<option value="">No Collection</option>';
-    state.collections.forEach(collection => {
-        const option = document.createElement('option');
-        option.value = collection.id;
-        option.textContent = collection.name;
-        if (selectedId && option.value === selectedId) {
-            option.selected = true;
-        }
-        select.appendChild(option);
-    });
-    // If selectedId provided and not empty, set it
-    if (selectedId) {
-        select.value = selectedId;
-    }
+    updateDropdown('promptCollection', state.collections, 'No Collection', selectedId);
 }
 
 export function updateCategoryDropdown(selectedId = null) {
-    const select = document.getElementById('promptCategory');
-    if (!select) return;
-    select.innerHTML = '<option value="">No Category</option>';
-    state.categories.forEach(cat => {
-        const option = document.createElement('option');
-        option.value = cat.id;
-        option.textContent = cat.name;
-        if (selectedId && option.value === selectedId) {
-            option.selected = true;
-        }
-        select.appendChild(option);
-    });
-    // If selectedId provided and not empty, set it
-    if (selectedId) {
-        select.value = selectedId;
-    }
+    updateDropdown('promptCategory', state.categories, 'No Category', selectedId);
 }

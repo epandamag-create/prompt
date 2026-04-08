@@ -25,11 +25,10 @@ import {
     updateCharCounter, 
     previewVariables 
 } from '../view/form.js';
-import { getFilteredPrompts } from '../services/prompt-service.js';
 import { promptService } from './prompt-service.js';
-import { escapeHtml, debounce } from '../utils/helpers.js';
-import { SEARCH_DEBOUNCE_MS } from '../config/constants.js';
-import { renderAll } from '../view/render.js';
+import { setupDragHandlers } from './drag-service.js';
+import { escapeHtml, debounce, throttle } from '../utils/helpers.js';
+import { SEARCH_DEBOUNCE_MS, PROMPT_TITLE_MAX_LENGTH, PROMPT_TAGS_MAX_COUNT } from '../config/constants.js';
 import { searchController } from '../controllers/search-controller.js';
 import { taxonomyController } from '../controllers/taxonomy-controller.js';
 
@@ -67,6 +66,15 @@ export function initializeEventListeners() {
     
     // 9. Prompt content hover tooltip
     setupPromptContentHover();
+
+    // 10. Sidebar drag-and-drop reordering + prompt card drop
+    setupDragHandlers();
+
+    // 11. Card hover tracking for hotkeys
+    setupCardHoverTracking();
+
+    // 12. Card keyboard navigation
+    setupCardKeyboardNavigation();
 }
 
 function setupDropdownCloseHandlers() {
@@ -120,10 +128,53 @@ function setupFormHandlers() {
             updateCharCounter();
         });
     }
-    
+
+    const promptTitle = document.getElementById('promptTitle');
+    if (promptTitle) {
+        // Create hint element once at setup, not inside the event handler
+        const titleHint = document.createElement('small');
+        titleHint.className = 'title-length-hint';
+        titleHint.style.cssText = 'display:block;font-size:11px;margin-top:2px;';
+        promptTitle.parentNode.appendChild(titleHint);
+
+        promptTitle.addEventListener('input', () => {
+            const len = promptTitle.value.length;
+            if (len > PROMPT_TITLE_MAX_LENGTH) {
+                titleHint.textContent = `Title too long: ${len}/${PROMPT_TITLE_MAX_LENGTH}`;
+                titleHint.style.color = 'var(--error)';
+                promptTitle.style.borderColor = 'var(--error)';
+            } else if (len > PROMPT_TITLE_MAX_LENGTH * 0.85) {
+                titleHint.textContent = `${len}/${PROMPT_TITLE_MAX_LENGTH} characters`;
+                titleHint.style.color = 'var(--warning)';
+                promptTitle.style.borderColor = '';
+            } else {
+                titleHint.textContent = '';
+                promptTitle.style.borderColor = '';
+            }
+        });
+    }
+
     const promptTags = document.getElementById('promptTags');
     if (promptTags) {
-        promptTags.addEventListener('input', (e) => searchController.handleTagInput(e));
+        // Create hint element once at setup
+        const tagsHint = document.createElement('small');
+        tagsHint.className = 'tags-count-hint';
+        tagsHint.style.cssText = 'display:block;font-size:11px;margin-top:2px;';
+        promptTags.parentNode.appendChild(tagsHint);
+
+        promptTags.addEventListener('input', (e) => {
+            searchController.handleTagInput(e);
+            const tags = promptTags.value.split(',').map(t => t.trim()).filter(Boolean);
+            if (tags.length > PROMPT_TAGS_MAX_COUNT) {
+                tagsHint.textContent = `Too many tags: ${tags.length}/${PROMPT_TAGS_MAX_COUNT} max`;
+                tagsHint.style.color = 'var(--error)';
+            } else if (tags.length >= PROMPT_TAGS_MAX_COUNT - 2) {
+                tagsHint.textContent = `${tags.length}/${PROMPT_TAGS_MAX_COUNT} tags`;
+                tagsHint.style.color = 'var(--warning)';
+            } else {
+                tagsHint.textContent = '';
+            }
+        });
         promptTags.addEventListener('keydown', (e) => searchController.handleTagKeydown(e));
     }
 }
@@ -201,26 +252,26 @@ function setupPromptContentHover() {
         return tooltipEl;
     }
     
-    document.addEventListener('mouseover', (e) => {
+    document.addEventListener('mouseover', throttle((e) => {
         const contentEl = e.target.closest('.prompt-content');
         if (!contentEl) return;
-        
+
         clearTimeout(hideTimeout);
-        
+
         const content = contentEl.dataset.promptContent;
         if (!content) return;
-        
+
         const tooltip = createTooltip();
         tooltip.textContent = content;
         tooltip.style.display = 'block';
-        
+
         // Position tooltip
         const rect = contentEl.getBoundingClientRect();
         const tooltipRect = tooltip.getBoundingClientRect();
-        
+
         let left = rect.left;
         let top = rect.bottom + 8;
-        
+
         // Keep tooltip within viewport
         if (left + tooltipRect.width > window.innerWidth - 20) {
             left = window.innerWidth - tooltipRect.width - 20;
@@ -228,10 +279,10 @@ function setupPromptContentHover() {
         if (top + tooltipRect.height > window.innerHeight - 20) {
             top = rect.top - tooltipRect.height - 8;
         }
-        
+
         tooltip.style.left = left + 'px';
         tooltip.style.top = top + 'px';
-    });
+    }, 100));
     
     document.addEventListener('mouseout', (e) => {
         const contentEl = e.target.closest('.prompt-content');
@@ -242,6 +293,52 @@ function setupPromptContentHover() {
                 tooltipEl.style.display = 'none';
             }
         }, 200);
+    });
+}
+
+// Drag-and-drop logic has been extracted to drag-service.js
+
+// ============================================
+// Card Arrow-Key Navigation
+// ============================================
+function setupCardKeyboardNavigation() {
+    document.addEventListener('keydown', (e) => {
+        if (state.ui.openModals.size > 0) return;
+        if (document.activeElement && document.activeElement.matches('input, textarea, select')) return;
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+
+        const cards = [...document.querySelectorAll('.prompt-card')];
+        if (cards.length === 0) return;
+
+        e.preventDefault();
+        const currentIndex = cards.indexOf(document.activeElement);
+        let nextIndex;
+
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+            nextIndex = currentIndex < cards.length - 1 ? currentIndex + 1 : 0;
+        } else {
+            nextIndex = currentIndex > 0 ? currentIndex - 1 : cards.length - 1;
+        }
+
+        cards[nextIndex].focus();
+        state.ui.hoveredCardId = cards[nextIndex].dataset.originalId;
+    });
+}
+
+// ============================================
+// Card Hover Tracking for Hotkeys
+// ============================================
+function setupCardHoverTracking() {
+    document.addEventListener('mouseover', (e) => {
+        const card = e.target.closest('.prompt-card');
+        state.ui.hoveredCardId = card ? card.dataset.originalId : null;
+    });
+
+    document.addEventListener('mouseout', (e) => {
+        const card = e.target.closest('.prompt-card');
+        if (card && !card.contains(e.relatedTarget)) {
+            state.ui.hoveredCardId = null;
+        }
     });
 }
 

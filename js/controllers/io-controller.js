@@ -10,7 +10,7 @@ export const ioController = {
         const fileInput = document.getElementById('importFile');
         const file = fileInput?.files[0];
         const importMode = document.querySelector('input[name="importMode"]:checked')?.value ?? 'merge';
-        
+
         if (!file) {
             return showToast('Please select a file', 'error');
         }
@@ -21,6 +21,14 @@ export const ioController = {
 
         if (!isJson && !isCsv) {
             return showToast('Invalid file type. Please select a JSON or CSV file.', 'error');
+        }
+
+        // Fix #12: Show loading state
+        const importBtn = document.getElementById('importConfirmBtn');
+        const originalText = importBtn?.textContent;
+        if (importBtn) {
+            importBtn.disabled = true;
+            importBtn.textContent = 'Importing…';
         }
 
         try {
@@ -45,6 +53,11 @@ export const ioController = {
         } catch (error) {
             showToast('Error importing file: ' + error.message, 'error');
             console.error('Import error:', error);
+        } finally {
+            if (importBtn) {
+                importBtn.disabled = false;
+                importBtn.textContent = originalText;
+            }
         }
     },
 
@@ -88,14 +101,26 @@ export const ioController = {
         closeModal('exportModal');
     },
 
-    showExportModal() {
-        // Reset form to defaults
+    showExportModal(scope = 'all') {
         const formatJson = document.querySelector('input[name="exportFormat"][value="json"]');
-        const scopeAll = document.querySelector('input[name="exportScope"][value="all"]');
+        const scopeRadio = document.querySelector(`input[name="exportScope"][value="${scope}"]`);
         if (formatJson) formatJson.checked = true;
-        if (scopeAll) scopeAll.checked = true;
-        
+        if (scopeRadio) scopeRadio.checked = true;
+
+        this._updateExportCount();
+        document.querySelectorAll('input[name="exportScope"]').forEach(radio => {
+            radio.onchange = () => this._updateExportCount();
+        });
+
         openModal('exportModal');
+    },
+
+    _updateExportCount() {
+        const scopeRadio = document.querySelector('input[name="exportScope"]:checked');
+        const scope = scopeRadio ? scopeRadio.value : 'all';
+        const count = scope === 'filtered' ? getFilteredPrompts().length : state.prompts.length;
+        const countEl = document.getElementById('exportScopeCount');
+        if (countEl) countEl.textContent = `${count} prompt${count !== 1 ? 's' : ''} will be exported`;
     },
 
     hideExportModal() {

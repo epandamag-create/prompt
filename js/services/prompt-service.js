@@ -1,10 +1,11 @@
 import { state, stateManager, stateVersion } from '../state.js';
-import { VIEWS, SORT_OPTIONS } from '../config/constants.js';
+import { VIEWS, SORT_OPTIONS, RECENT_PROMPTS_LIMIT } from '../config/constants.js';
 import { createPromptModel, duplicatePromptModel, buildSearchIndex } from '../models/prompt.js';
 import { extractVariables, copyToClipboard } from '../utils/helpers.js';
 import { closeModal } from '../view/modal.js';
-import { showToast } from '../view/ui.js';
+import { showToast, updateBulkUI } from '../view/ui.js';
 import { getPromptFormData } from '../view/form.js';
+import { historyService } from './history-service.js';
 
 // Cache for memoization - invalidated when state changes
 let cache = null;
@@ -17,16 +18,7 @@ let tagCache = null;
  * Compute cache key based on current state
  */
 function computeCacheKey() {
-    return JSON.stringify({
-        version: stateVersion,
-        prompts: state.prompts?.length || 0,
-        view: state.currentView,
-        collections: state.currentCollections,
-        categories: state.currentCategories,
-        tags: state.currentTags,
-        search: state.searchQuery,
-        sort: state.preferences.sortBy
-    });
+    return `${stateVersion}|${state.currentView}|${state.searchQuery}|${state.preferences.sortBy}|${state.currentCollections.join(',')}|${state.currentCategories.join(',')}|${state.currentTags.join(',')}`;
 }
 
 /**
@@ -70,8 +62,8 @@ export function getFilteredPrompts() {
         prompts = prompts
             .filter(p => p.lastUsed)
             .sort((a, b) => b.lastUsed - a.lastUsed)
-            .slice(0, 20);
-} else if (state.currentView === VIEWS.FILTERED) {
+            .slice(0, RECENT_PROMPTS_LIMIT);
+    } else if (state.currentView === VIEWS.FILTERED) {
         prompts = prompts.filter(p => {
             if (state.currentCollections.length > 0 && !state.currentCollections.includes(p.collectionId)) {
                 return false;
@@ -90,15 +82,13 @@ export function getFilteredPrompts() {
     const collectionMap = new Map(state.collections.map(c => [c.id, c]));
     
     if (state.searchQuery) {
+        const queryLower = state.searchQuery.toLowerCase();
         prompts = prompts.filter(p => {
             const cat = categoryMap.get(p.categoryId);
             const col = collectionMap.get(p.collectionId);
             const dynamicContext = ((cat?.name ?? '') + ' ' + (col?.name || '')).toLowerCase();
-            
-            // Calculate search index on demand if missing (Lazy evaluation)
             const searchIndex = p._searchIndex ?? buildSearchIndex(p);
-            
-            return (searchIndex + ' ' + dynamicContext).includes(state.searchQuery);
+            return (searchIndex + ' ' + dynamicContext).includes(queryLower);
         });
     }
 
@@ -136,21 +126,23 @@ export function clearPromptCache() {
     invalidateTagCache();
 }
 
-// Helper function to save state
-const saveState = () => stateManager.save();
+/**
+ * Commit state, save, and re-render.
+ * Pass `{ prompts: true }` to skip sidebar re-render when only card data changed.
+ * Delegates to stateManager.commit() which calls renderAll() synchronously,
+ * avoiding the async dynamic-import anti-pattern.
+ * @param {Object} [updates] - Partial render hints forwarded to renderAll
+ */
+function commitAndRender(updates = {}) {
+    stateManager.commit(updates);
+}
 
 /**
- * Render prompts with optional partial update
- * @param {boolean} onlyPrompts - Only render prompts, not full UI
+ * Build an id→prompt Map for O(1) bulk lookups
+ * @returns {Map<string, Object>}
  */
-function renderPrompts(onlyPrompts = false) {
-    import('../view/render.js').then(render => {
-        if (onlyPrompts) {
-            render.renderPrompts();
-        } else {
-            render.renderAll({ prompts: true });
-        }
-    });
+function getPromptMap() {
+    return new Map(state.prompts.map(p => [p.id, p]));
 }
 
 /**
@@ -182,15 +174,16 @@ export const promptService = {
     update(id, formData) {
         const prompt = state.prompts.find(p => p.id === id);
         if (!prompt) return null;
-        
+
         Object.assign(prompt, {
             ...formData,
             variables: extractVariables(formData.content),
             updatedAt: Date.now()
         });
-        
-        prompt._searchIndex = [prompt.title, prompt.description, prompt.content, ...prompt.tags].join(' ').toLowerCase();
-        
+
+        // Refresh cached search index after content-related fields change
+        prompt._searchIndex = buildSearchIndex(prompt);
+
         return prompt;
     },
 
@@ -200,20 +193,7 @@ export const promptService = {
      * @returns {Object|null} Deleted prompt data or null
      */
     delete(id) {
-        const idx = state.prompts.findIndex(p => p.id === id);
-        if (idx === -1) return null;
-        
-        const prevPrompt = state.prompts[idx - 1];
-        const nextPrompt = state.prompts[idx + 1];
-        const neighbors = {
-            prevId: prevPrompt?.id || null,
-            nextId: nextPrompt?.id || null
-        };
-        
-        const deleted = state.prompts[idx];
-        state.prompts.splice(idx, 1);
-        
-        return { prompt: deleted, neighbors };
+        return stateManager.deletePrompt(id);
     },
 
     /**
@@ -221,20 +201,7 @@ export const promptService = {
      * @param {Object} deleted - Deleted prompt data with neighbors
      */
     restore(deleted) {
-        const { prompt, neighbors } = deleted;
-        let restoreIndex;
-        
-        if (neighbors.nextId) {
-            restoreIndex = state.prompts.findIndex(p => p.id === neighbors.nextId);
-            if (restoreIndex === -1) restoreIndex = state.prompts.length;
-        } else if (neighbors.prevId) {
-            const prevIndex = state.prompts.findIndex(p => p.id === neighbors.prevId);
-            restoreIndex = prevIndex !== -1 ? prevIndex + 1 : state.prompts.length;
-        } else {
-            restoreIndex = 0;
-        }
-        
-        state.prompts.splice(restoreIndex, 0, prompt);
+        stateManager.restorePrompt(deleted);
     },
 
     /**
@@ -289,6 +256,7 @@ export const promptService = {
     bulkDelete(ids) {
         const count = ids.size;
         state.prompts = state.prompts.filter(p => !ids.has(p.id));
+        stateManager.bumpVersion();
         return count;
     },
 
@@ -297,8 +265,7 @@ export const promptService = {
      * @param {Set} ids - Set of prompt IDs
      */
     bulkToggleFavorite(ids) {
-        // Create Map for O(1) lookup instead of O(n) find per item
-        const promptMap = new Map(state.prompts.map(p => [p.id, p]));
+        const promptMap = getPromptMap();
         
         ids.forEach(id => {
             const prompt = promptMap.get(id);
@@ -315,12 +282,13 @@ export const promptService = {
      * @param {string|null} collectionId - Collection ID
      */
     bulkMoveToCollection(ids, collectionId) {
-        const promptMap = new Map(state.prompts.map(p => [p.id, p]));
-        
+        const promptMap = getPromptMap();
+
         ids.forEach(id => {
             const prompt = promptMap.get(id);
             if (prompt) {
                 prompt.collectionId = collectionId;
+                prompt.updatedAt = Date.now();
             }
         });
     },
@@ -337,19 +305,29 @@ export const promptService = {
         const isEditing = !!state.editingPromptId;
 
         if (isEditing) {
-            this.update(state.editingPromptId, {
-                ...formData,
-                variables: extractVariables(formData.content),
-                updatedAt: Date.now()
-            });
+            const id = state.editingPromptId;
+            const snap = state.prompts.find(p => p.id === id);
+            // Deep-copy array fields so undo/redo restores the original values,
+            // not a reference that mutates along with the live prompt.
+            const before = { ...snap, tags: [...(snap.tags || [])], variables: [...(snap.variables || [])] };
+            this.update(id, formData);
+            const snapAfter = state.prompts.find(p => p.id === id);
+            const after = { ...snapAfter, tags: [...(snapAfter.tags || [])], variables: [...(snapAfter.variables || [])] };
+            historyService.push(
+                () => { stateManager.updatePrompt(id, before); commitAndRender(); },
+                () => { stateManager.updatePrompt(id, after); commitAndRender(); }
+            );
         } else {
-            this.create(formData);
+            const newPrompt = this.create(formData);
+            const id = newPrompt.id;
+            historyService.push(
+                () => { stateManager.deletePrompt(id); commitAndRender(); },
+                () => { stateManager.addPrompt(newPrompt, 0); commitAndRender(); }
+            );
         }
 
-        clearPromptCache();
-        saveState();
-        renderPrompts();
-        
+        commitAndRender();
+
         closeModal('promptModal');
         showToast(isEditing ? 'Prompt updated!' : 'Prompt created!', 'success');
     },
@@ -361,17 +339,15 @@ export const promptService = {
     deletePrompt(id) {
         const deleted = this.delete(id);
         if (!deleted) return;
-        
-        clearPromptCache();
-        saveState();
-        renderPrompts();
 
-        showToast('Prompt deleted', 'success', () => {
-            this.restore(deleted);
-            clearPromptCache();
-            renderPrompts();
-            showToast('Prompt restored!', 'success');
-        });
+        historyService.push(
+            () => { this.restore(deleted); commitAndRender(); showToast('Prompt restored!', 'success'); },
+            () => { this.delete(deleted.prompt.id); commitAndRender(); }
+        );
+
+        commitAndRender();
+
+        showToast('Prompt deleted', 'success');
     },
 
     /**
@@ -381,11 +357,8 @@ export const promptService = {
     clonePrompt(id) {
         const clone = this.duplicate(id);
         if (!clone) return;
-        
-        clearPromptCache();
-        saveState();
-        renderPrompts();
 
+        commitAndRender();
         showToast('Prompt duplicated!', 'success');
     },
 
@@ -396,10 +369,8 @@ export const promptService = {
     togglePromptFavorite(id) {
         const result = this.toggleFavorite(id);
         if (result === null) return;
-        
-        clearPromptCache();
-        saveState();
-        renderPrompts(true);
+
+        commitAndRender({ prompts: true });
     },
 
     /**
@@ -413,10 +384,12 @@ export const promptService = {
         copyToClipboard(prompt.content).then(() => {
             prompt.usageCount++;
             prompt.lastUsed = Date.now();
-            
-            clearPromptCache();
-            saveState();
-            
+            stateManager.bumpVersion();
+
+            // Re-render so the usage count and "recently used" sort order update
+            // immediately without waiting for the next user action.
+            commitAndRender({ prompts: true });
+
             showToast('Copied to clipboard!', 'success');
         }).catch(() => {
             showToast('Failed to copy to clipboard', 'error');
@@ -424,74 +397,136 @@ export const promptService = {
     },
 
     /**
-     * Bulk delete prompts with UI update
+     * Bulk delete prompts with UI update and undo support
      * @param {Set} ids - Set of prompt IDs
      */
     bulkDeletePrompts(ids) {
-        const count = this.bulkDelete(ids);
-        if (count === 0) return;
-        
-        clearPromptCache();
-        saveState();
-        renderPrompts();
+        const idsSnapshot = new Set(ids);
+        const deletedPrompts = state.prompts.filter(p => idsSnapshot.has(p.id));
+        if (deletedPrompts.length === 0) return;
 
+        const count = this.bulkDelete(idsSnapshot);
+
+        historyService.push(
+            () => { deletedPrompts.forEach(p => state.prompts.unshift(p)); stateManager.bumpVersion(); commitAndRender(); showToast(`${count} prompt${count > 1 ? 's' : ''} restored`, 'success'); },
+            () => { this.bulkDelete(idsSnapshot); commitAndRender(); }
+        );
+
+        commitAndRender();
         state.ui.selectedPrompts.clear();
-        
-        import('../view/ui.js').then(ui => {
-            ui.updateBulkUI();
-        });
+        updateBulkUI();
 
         showToast(`${count} prompt${count > 1 ? 's' : ''} deleted`, 'success');
     },
 
     /**
-     * Bulk toggle favorites with UI update
+     * Bulk toggle favorites with UI update and undo support
      * @param {Set} ids - Set of prompt IDs
      */
     bulkToggleFavorites(ids) {
-        this.bulkToggleFavorite(ids);
-        
-        clearPromptCache();
-        saveState();
-        renderPrompts(true);
+        const idsSnapshot = new Set(ids);
+        const pm0 = getPromptMap();
+        const previousStates = new Map([...idsSnapshot].map(id => {
+            return [id, pm0.get(id)?.favorite ?? false];
+        }));
 
+        this.bulkToggleFavorite(idsSnapshot);
+
+        historyService.push(
+            () => { const pm = getPromptMap(); previousStates.forEach((fav, id) => { const p = pm.get(id); if (p) { p.favorite = fav; p.updatedAt = Date.now(); } }); commitAndRender({ prompts: true }); },
+            () => { this.bulkToggleFavorite(idsSnapshot); commitAndRender({ prompts: true }); }
+        );
+
+        commitAndRender({ prompts: true });
         showToast('Favorites updated!', 'success');
     },
 
     /**
-     * Bulk move to collection with UI update
+     * Bulk move to collection with UI update and undo support
      * @param {Set} ids - Set of prompt IDs
      * @param {string|null} collectionId - Collection ID
      */
     bulkMoveToCollectionPrompt(ids, collectionId) {
-        this.bulkMoveToCollection(ids, collectionId);
-        
-        clearPromptCache();
-        saveState();
-        renderPrompts();
+        const idsSnapshot = new Set(ids);
+        const pm0 = getPromptMap();
+        const previousCollections = new Map([...idsSnapshot].map(id => {
+            return [id, pm0.get(id)?.collectionId ?? null];
+        }));
 
+        this.bulkMoveToCollection(idsSnapshot, collectionId);
+
+        historyService.push(
+            () => { const pm = getPromptMap(); previousCollections.forEach((colId, id) => { const p = pm.get(id); if (p) p.collectionId = colId; }); commitAndRender(); },
+            () => { this.bulkMoveToCollection(idsSnapshot, collectionId); commitAndRender(); }
+        );
+
+        commitAndRender();
         showToast('Prompts moved to collection!', 'success');
     },
 
     /**
-     * Bulk change category with UI update - O(n) using Map
+     * Bulk edit tags with undo support
+     * @param {Set} ids - Set of prompt IDs
+     * @param {'add'|'remove'|'replace'} mode
+     * @param {string[]} tags - Tags to apply
+     */
+    bulkEditTags(ids, mode, tags) {
+        const idsSnapshot = new Set(ids);
+        const pm0 = getPromptMap();
+        const previousTags = new Map([...idsSnapshot].map(id => {
+            return [id, [...(pm0.get(id)?.tags || [])]];
+        }));
+
+        function applyTags(p) {
+            const existing = p.tags || [];
+            if (mode === 'add') {
+                p.tags = [...new Set([...existing, ...tags])];
+            } else if (mode === 'remove') {
+                p.tags = existing.filter(t => !tags.includes(t));
+            } else {
+                p.tags = [...tags];
+            }
+            p.updatedAt = Date.now();
+        }
+
+        state.prompts.forEach(p => { if (idsSnapshot.has(p.id)) applyTags(p); });
+
+        historyService.push(
+            () => { state.prompts.forEach(p => { if (previousTags.has(p.id)) p.tags = previousTags.get(p.id); }); commitAndRender(); },
+            () => { state.prompts.forEach(p => { if (idsSnapshot.has(p.id)) applyTags(p); }); commitAndRender(); }
+        );
+
+        commitAndRender();
+        showToast(`Tags updated on ${idsSnapshot.size} prompt${idsSnapshot.size > 1 ? 's' : ''}!`, 'success');
+    },
+
+    /**
+     * Bulk move to category with UI update and undo support
      * @param {Set} ids - Set of prompt IDs
      * @param {string|null} categoryId - Category ID
      */
-    bulkChangeCategory(ids, categoryId) {
-        const promptMap = new Map(state.prompts.map(p => [p.id, p]));
-        
-        ids.forEach(id => {
+    bulkMoveToCategoryPrompt(ids, categoryId) {
+        const idsSnapshot = new Set(ids);
+        const pm0 = getPromptMap();
+        const previousCategories = new Map([...idsSnapshot].map(id => {
+            return [id, pm0.get(id)?.categoryId ?? null];
+        }));
+
+        const promptMap = getPromptMap();
+        idsSnapshot.forEach(id => {
             const prompt = promptMap.get(id);
             if (prompt) {
                 prompt.categoryId = categoryId;
+                prompt.updatedAt = Date.now();
             }
         });
-        
-        clearPromptCache();
-        saveState();
-        renderPrompts();
 
-        showToast('Category updated!', 'success');
+        historyService.push(
+            () => { const pm = getPromptMap(); previousCategories.forEach((catId, id) => { const p = pm.get(id); if (p) p.categoryId = catId; }); commitAndRender(); },
+            () => { const pm = getPromptMap(); idsSnapshot.forEach(id => { const p = pm.get(id); if (p) p.categoryId = categoryId; }); commitAndRender(); }
+        );
+
+        commitAndRender();
+        showToast('Prompts moved to category!', 'success');
     }
 };

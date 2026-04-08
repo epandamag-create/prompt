@@ -33,8 +33,10 @@ import { generateId, extractVariables } from '../utils/helpers.js';
  * @returns {string} Lowercase search index
  */
 export function buildSearchIndex(prompt) {
+    // Use \x00 as field separator to prevent cross-field false positives.
+    // A query cannot contain \x00 from keyboard input, so no false negatives.
     return [prompt.title, prompt.description, prompt.content, ...prompt.tags]
-        .join(' ').toLowerCase();
+        .join('\x00').toLowerCase();
 }
 
 /**
@@ -42,7 +44,6 @@ export function buildSearchIndex(prompt) {
  * @param {PromptFormData} data - Form data for the prompt
  * @returns {Prompt} New prompt object
  */
-// Lazy-loaded search index - only built when needed
 export function createPromptModel(data) {
     const prompt = {
         id: generateId(),
@@ -59,15 +60,11 @@ export function createPromptModel(data) {
         createdAt: Date.now(),
         updatedAt: Date.now()
     };
-    // Lazy load search index - use a getter that builds on first access
+    // Cached search index — computed once, updated explicitly on edit.
+    // Non-enumerable so it is not serialised to IndexedDB or JSON exports.
     Object.defineProperty(prompt, '_searchIndex', {
-        get: function() {
-            return buildSearchIndex(this);
-        },
-        set: function(value) {
-            // Allow manual setting (for backwards compatibility)
-            this._cachedSearchIndex = value;
-        },
+        value: buildSearchIndex(prompt),
+        writable: true,
         configurable: true,
         enumerable: false
     });
@@ -91,29 +88,12 @@ export function duplicatePromptModel(original) {
         createdAt: Date.now(),
         updatedAt: Date.now()
     };
-    // Use lazy-loaded search index
     Object.defineProperty(newPrompt, '_searchIndex', {
-        get: function() {
-            return buildSearchIndex(this);
-        },
-        set: function(value) {
-            this._cachedSearchIndex = value;
-        },
+        value: buildSearchIndex(newPrompt),
+        writable: true,
         configurable: true,
         enumerable: false
     });
     return newPrompt;
 }
 
-/**
- * Gets the search index for a prompt (uses cache if available)
- * @param {Prompt} prompt - The prompt to get index for
- * @returns {string} The search index
- */
-// Helper to get search index (uses cache if available)
-export function getSearchIndex(prompt) {
-    if (prompt._cachedSearchIndex !== undefined) {
-        return prompt._cachedSearchIndex;
-    }
-    return prompt._searchIndex; // Triggers getter to build
-}
